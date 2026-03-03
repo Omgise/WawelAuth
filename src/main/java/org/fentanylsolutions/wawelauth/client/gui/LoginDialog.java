@@ -1,0 +1,253 @@
+package org.fentanylsolutions.wawelauth.client.gui;
+
+import java.util.function.Consumer;
+
+import net.minecraft.client.Minecraft;
+
+import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ClientAccount;
+
+import com.cleanroommc.modularui.api.IPanelHandler;
+import com.cleanroommc.modularui.api.drawable.IKey;
+import com.cleanroommc.modularui.screen.ModularPanel;
+import com.cleanroommc.modularui.utils.Alignment;
+import com.cleanroommc.modularui.widget.Widget;
+import com.cleanroommc.modularui.widgets.ButtonWidget;
+import com.cleanroommc.modularui.widgets.Dialog;
+import com.cleanroommc.modularui.widgets.TextWidget;
+import com.cleanroommc.modularui.widgets.layout.Column;
+import com.cleanroommc.modularui.widgets.layout.Row;
+
+import cpw.mods.fml.relauncher.Side;
+import cpw.mods.fml.relauncher.SideOnly;
+
+@SideOnly(Side.CLIENT)
+public final class LoginDialog {
+
+    private final Consumer<ClientAccount> onResult;
+    private final IPanelHandler panelHandler;
+    private String providerName;
+    private boolean forceMicrosoftLogin;
+    private String initialMessage;
+
+    private LoginDialog(ModularPanel parentPanel, Consumer<ClientAccount> onResult) {
+        this.onResult = onResult;
+        this.panelHandler = IPanelHandler.simple(parentPanel, (parent, player) -> {
+            String provider = this.providerName != null ? this.providerName : "";
+            String providerLabel = ProviderDisplayName.displayName(provider);
+            boolean supportsMicrosoftLogin = ProviderDisplayName.isMicrosoftProvider(provider);
+            boolean directMicrosoftLogin = supportsMicrosoftLogin && this.forceMicrosoftLogin;
+            Dialog<ClientAccount> dialog = new Dialog<>("wawelauth_login", this.onResult);
+            dialog.setCloseOnOutOfBoundsClick(false);
+
+            TabTextFieldWidget usernameField = new TabTextFieldWidget();
+            usernameField.hintText(GuiText.tr("wawelauth.gui.common.username"));
+            PasswordInputWidget passwordField = new PasswordInputWidget()
+                .hintText(GuiText.tr("wawelauth.gui.common.password"));
+
+            String initMsg = this.initialMessage;
+            String[] errorText = { initMsg != null ? initMsg : "" };
+            boolean[] isError = { initMsg == null };
+            boolean[] busy = { false };
+
+            ButtonWidget<?> loginBtn = new ButtonWidget<>();
+            ButtonWidget<?> cancelBtn = new ButtonWidget<>();
+            ButtonWidget<?> microsoftBtn = new ButtonWidget<>();
+            Runnable[] startMicrosoftLogin = new Runnable[1];
+
+            cancelBtn.size(56, 18)
+                .onMousePressed(mouseButton -> {
+                    dialog.closeWith(null);
+                    return true;
+                });
+            GuiText.fitButtonLabel(cancelBtn, 56, "wawelauth.gui.common.cancel");
+
+            Runnable doLogin = () -> {
+                if (busy[0]) return;
+                isError[0] = true;
+
+                if (provider.isEmpty()) {
+                    errorText[0] = GuiText.tr("wawelauth.gui.login.error.no_provider");
+                    return;
+                }
+
+                String username = usernameField.getText()
+                    .trim();
+                String password = passwordField.getText();
+
+                if (username.isEmpty()) {
+                    errorText[0] = GuiText.tr("wawelauth.gui.login.error.username_required");
+                    return;
+                }
+                if (password.isEmpty()) {
+                    errorText[0] = GuiText.tr("wawelauth.gui.login.error.password_required");
+                    return;
+                }
+
+                busy[0] = true;
+                errorText[0] = GuiText.tr("wawelauth.gui.login.status.authenticating");
+
+                WawelClient.instance()
+                    .getAccountManager()
+                    .authenticate(provider, username, password)
+                    .whenComplete((account, err) -> {
+                        Minecraft.getMinecraft()
+                            .func_152344_a(() -> { // Minecraft.addScheduledTask
+                                busy[0] = false;
+                                if (err != null) {
+                                    Throwable cause = err.getCause() != null ? err.getCause() : err;
+                                    errorText[0] = cause.getMessage();
+                                    WawelAuth.debug("Login failed: " + cause.getMessage());
+                                } else {
+                                    dialog.closeWith(account);
+                                }
+                            });
+                    });
+            };
+
+            usernameField.onEnterPressed(doLogin);
+            passwordField.onEnterPressed(doLogin);
+
+            loginBtn.size(56, 18)
+                .onMousePressed(mouseButton -> {
+                    doLogin.run();
+                    return true;
+                });
+            GuiText.fitButtonLabel(loginBtn, 56, "wawelauth.gui.common.login");
+
+            startMicrosoftLogin[0] = () -> {
+                if (busy[0]) return;
+                isError[0] = true;
+
+                if (!supportsMicrosoftLogin) {
+                    errorText[0] = GuiText.tr("wawelauth.gui.login.error.microsoft_only");
+                    return;
+                }
+
+                busy[0] = true;
+                errorText[0] = GuiText.tr("wawelauth.gui.login.status.microsoft_opening");
+
+                WawelClient.instance()
+                    .getAccountManager()
+                    .authenticateMicrosoft(
+                        provider,
+                        status -> Minecraft.getMinecraft()
+                            .func_152344_a(() -> errorText[0] = status))
+                    .whenComplete((account, err) -> {
+                        Minecraft.getMinecraft()
+                            .func_152344_a(() -> {
+                                busy[0] = false;
+                                if (err != null) {
+                                    Throwable cause = err.getCause() != null ? err.getCause() : err;
+                                    errorText[0] = cause.getMessage();
+                                    WawelAuth.debug("Microsoft login failed: " + cause.getMessage());
+                                } else {
+                                    dialog.closeWith(account);
+                                }
+                            });
+                    });
+            };
+
+            microsoftBtn.size(70, 18)
+                .onMousePressed(mouseButton -> {
+                    if (busy[0]) return true;
+
+                    if (!supportsMicrosoftLogin) {
+                        errorText[0] = GuiText.tr("wawelauth.gui.login.error.microsoft_only");
+                        return true;
+                    }
+                    startMicrosoftLogin[0].run();
+                    return true;
+                });
+            GuiText.fitButtonLabel(microsoftBtn, 70, "wawelauth.gui.common.microsoft");
+
+            Row buttonRow = new Row();
+            buttonRow.widthRel(1.0f)
+                .height(20)
+                .mainAxisAlignment(Alignment.MainAxis.CENTER);
+            buttonRow.child(cancelBtn);
+            if (!directMicrosoftLogin) {
+                buttonRow.child(new Widget<>().size(6, 18))
+                    .child(loginBtn);
+            }
+            if (supportsMicrosoftLogin && !directMicrosoftLogin) {
+                buttonRow.child(new Widget<>().size(6, 18))
+                    .child(microsoftBtn);
+            }
+
+            Column root = new Column();
+            root.widthRel(1.0f)
+                .heightRel(1.0f)
+                .padding(8);
+            root.child(
+                new TextWidget<>(GuiText.key("wawelauth.gui.login.title", providerLabel)).widthRel(1.0f)
+                    .height(12));
+
+            if (!directMicrosoftLogin) {
+                root.child(
+                    usernameField.widthRel(1.0f)
+                        .height(18)
+                        .setMaxLength(64)
+                        .margin(0, 3))
+                    .child(
+                        passwordField.widthRel(1.0f)
+                            .height(18)
+                            .setMaxLength(128)
+                            .margin(0, 3));
+            } else {
+                root.child(
+                    new TextWidget<>(GuiText.key("wawelauth.gui.login.status.microsoft_starting")).color(0xFFAAAAAA)
+                        .widthRel(1.0f)
+                        .height(12)
+                        .margin(0, 8));
+            }
+
+            root.child(
+                new TextWidget<>(IKey.dynamic(() -> errorText[0])).color(() -> isError[0] ? 0xFFFF5555 : 0xFF55FF55)
+                    .widthRel(1.0f)
+                    .height(12)
+                    .margin(0, 2))
+                .child(new Widget<>().size(1, 4))
+                .child(buttonRow);
+
+            dialog.size(236, directMicrosoftLogin ? 112 : 150)
+                .child(root);
+
+            if (directMicrosoftLogin) {
+                Minecraft.getMinecraft()
+                    .func_152344_a(startMicrosoftLogin[0]);
+            }
+
+            return dialog;
+        }, true);
+    }
+
+    public static LoginDialog attach(ModularPanel parentPanel, Consumer<ClientAccount> onResult) {
+        return new LoginDialog(parentPanel, onResult);
+    }
+
+    public void open(String providerName) {
+        this.providerName = providerName;
+        this.forceMicrosoftLogin = false;
+        this.initialMessage = null;
+        this.panelHandler.deleteCachedPanel();
+        this.panelHandler.openPanel();
+    }
+
+    public void openAfterRegister(String providerName) {
+        this.providerName = providerName;
+        this.forceMicrosoftLogin = false;
+        this.initialMessage = GuiText.tr("wawelauth.gui.login.status.after_register");
+        this.panelHandler.deleteCachedPanel();
+        this.panelHandler.openPanel();
+    }
+
+    public void openMicrosoft(String providerName) {
+        this.providerName = providerName;
+        this.forceMicrosoftLogin = true;
+        this.initialMessage = null;
+        this.panelHandler.deleteCachedPanel();
+        this.panelHandler.openPanel();
+    }
+}

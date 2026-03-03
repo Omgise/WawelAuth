@@ -1,0 +1,132 @@
+package org.fentanylsolutions.wawelauth.wawelclient.storage.sqlite;
+
+import java.io.File;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+
+import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.wawelcore.storage.sqlite.SqliteDatabase;
+
+/**
+ * Client-side SQLite database for the account manager.
+ *
+ * Extends {@link SqliteDatabase} to reuse connection management (WAL mode,
+ * synchronized access, etc.) but overrides table creation to produce only
+ * the client-specific schema (providers, accounts). Server tables are not
+ * created.
+ *
+ * Uses {@code PRAGMA user_version} for schema migrations from day one.
+ */
+public class ClientDatabase extends SqliteDatabase {
+
+    private static final int CURRENT_VERSION = 2;
+
+    public ClientDatabase(File dbFile) {
+        super(dbFile);
+    }
+
+    @Override
+    protected void createTables() throws SQLException {
+        int version = query(conn -> {
+            try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery("PRAGMA user_version")) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        });
+
+        WawelAuth.debug("Client DB version: " + version + ", target: " + CURRENT_VERSION);
+
+        if (version < 1) {
+            migrateToV1();
+        }
+        if (version < 2) {
+            migrateToV2();
+        }
+
+        // Future: if (version < 3) { migrateToV3(); }
+
+        execute(conn -> {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("PRAGMA user_version = " + CURRENT_VERSION);
+            }
+        });
+    }
+
+    private void migrateToV1() {
+        execute(conn -> {
+            try (Statement stmt = conn.createStatement()) {
+                stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS providers (
+                        name TEXT PRIMARY KEY,
+                        type TEXT NOT NULL,
+                        api_root TEXT NOT NULL,
+                        auth_server_url TEXT NOT NULL,
+                        session_server_url TEXT NOT NULL,
+                        services_url TEXT,
+                        skin_domains TEXT,
+                        public_key TEXT,
+                        public_key_fingerprint TEXT,
+                        created_at INTEGER NOT NULL
+                    )""");
+
+                stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS accounts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        provider_name TEXT NOT NULL REFERENCES providers(name) ON DELETE CASCADE,
+                        user_uuid TEXT NOT NULL,
+                        profile_uuid TEXT,
+                        profile_name TEXT,
+                        access_token TEXT NOT NULL,
+                        client_token TEXT,
+                        user_properties TEXT,
+                        status TEXT NOT NULL DEFAULT 'VALID',
+                        last_error TEXT,
+                        last_error_at INTEGER NOT NULL DEFAULT 0,
+                        last_refresh_attempt_at INTEGER NOT NULL DEFAULT 0,
+                        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                        created_at INTEGER NOT NULL,
+                        last_validated_at INTEGER NOT NULL,
+                        token_issued_at INTEGER NOT NULL
+                    )""");
+
+                // Unique per profile when a profile is bound
+                stmt.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider_profile "
+                        + "ON accounts(provider_name, profile_uuid) WHERE profile_uuid IS NOT NULL");
+                // Unique per user when no profile is bound (prevents duplicate unbound entries)
+                stmt.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_provider_user_unbound "
+                        + "ON accounts(provider_name, user_uuid) WHERE profile_uuid IS NULL");
+                stmt.execute("CREATE INDEX IF NOT EXISTS idx_accounts_provider " + "ON accounts(provider_name)");
+            }
+        });
+
+        WawelAuth.LOG.info("Client DB migrated to version 1");
+    }
+
+    private void migrateToV2() {
+        if (!hasColumn("accounts", "refresh_token")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE accounts ADD COLUMN refresh_token TEXT");
+                }
+            });
+        }
+        WawelAuth.LOG.info("Client DB migrated to version 2");
+    }
+
+    private boolean hasColumn(String tableName, String columnName) {
+        return query(conn -> {
+            try (Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + tableName + ")")) {
+                while (rs.next()) {
+                    String existing = rs.getString("name");
+                    if (columnName.equalsIgnoreCase(existing)) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
+    }
+}
