@@ -27,7 +27,7 @@ public final class LocalAuthProviderResolver {
     /**
      * Resolve or create the managed local provider for this server identity.
      *
-     * Manual providers are left untouched and can coexist.
+     * Existing providers are reused by matching public key, regardless of name.
      */
     public ClientProvider resolveOrCreate(ServerCapabilities capabilities) {
         if (capabilities == null || !capabilities.isLocalAuthSupported()) {
@@ -42,9 +42,9 @@ public final class LocalAuthProviderResolver {
             throw new IllegalArgumentException("Local auth metadata is incomplete (missing apiRoot or fingerprint).");
         }
 
-        String providerName = resolveProviderName(fingerprint);
-        ClientProvider provider = providerDAO.findByName(providerName);
+        ClientProvider provider = findByPublicKey(publicKeyBase64, fingerprint);
         if (provider == null) {
+            String providerName = resolveProviderName(fingerprint);
             provider = createProvider(providerName, apiRoot, fingerprint, publicKeyBase64, capabilities);
             providerDAO.create(provider);
             return provider;
@@ -92,17 +92,25 @@ public final class LocalAuthProviderResolver {
         return provider;
     }
 
+    private ClientProvider findByPublicKey(String publicKeyBase64, String fingerprint) {
+        for (ClientProvider provider : providerDAO.listAll()) {
+            if (publicKeyBase64 != null && publicKeyBase64.equals(normalizeString(provider.getPublicKeyBase64()))) {
+                return provider;
+            }
+            if (fingerprint.equals(normalizeFingerprint(provider.getPublicKeyFingerprint()))) {
+                return provider;
+            }
+        }
+        return null;
+    }
+
     private String resolveProviderName(String fingerprint) {
         String suffix = fingerprint.length() > 12 ? fingerprint.substring(0, 12) : fingerprint;
         String baseName = "LocalAuth-" + suffix;
 
         for (int i = 1; i < 200; i++) {
             String candidate = i == 1 ? baseName : baseName + "-" + i;
-            ClientProvider existing = providerDAO.findByName(candidate);
-            if (existing == null) {
-                return candidate;
-            }
-            if (fingerprint.equals(normalizeFingerprint(existing.getPublicKeyFingerprint()))) {
+            if (providerDAO.findByName(candidate) == null) {
                 return candidate;
             }
         }
