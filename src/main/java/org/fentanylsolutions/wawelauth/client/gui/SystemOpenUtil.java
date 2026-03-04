@@ -98,9 +98,11 @@ public final class SystemOpenUtil {
             }
         }
 
-        FilePickerResult tinyfdResult = pickWithTinyfd(title, initialDirectory);
-        if (tinyfdResult.getStatus() != FilePickerResult.Status.UNAVAILABLE) {
-            return validateImageSelection(tinyfdResult);
+        if (!isWindows()) {
+            FilePickerResult tinyfdResult = pickWithTinyfd(title, initialDirectory);
+            if (tinyfdResult.getStatus() != FilePickerResult.Status.UNAVAILABLE) {
+                return validateImageSelection(tinyfdResult);
+            }
         }
 
         FilePickerResult awtResult = pickWithAwt(title, initialDirectory);
@@ -341,6 +343,12 @@ public final class SystemOpenUtil {
         String osName = System.getProperty("os.name", "");
         return osName.toLowerCase()
             .contains("mac");
+    }
+
+    private static boolean isWindows() {
+        String osName = System.getProperty("os.name", "");
+        return osName.toLowerCase()
+            .contains("win");
     }
 
     private static String escapeAppleScript(String value) {
