@@ -202,3 +202,5 @@ wawelauth.gui.file_picker.select_file=Sélectionner un fichier
 wawelauth.gui.file_picker.tinyfd_missing=LWJGL tinyfd absent.
 wawelauth.gui.file_picker.unavailable=Le sélecteur de fichiers natif n'est pas disponible sur cet environnement.
 wawelauth.gui.file_picker.unknown_error=Erreur inconnue du sélecteur de fichiers.
+wawelauth.gui.local_auth.remove_auth=Retirer l'auth
+wawelauth.gui.local_auth.status.removed=Authentification locale retirée.

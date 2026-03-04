@@ -101,7 +101,8 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
             String successMessage = GuiText.tr(
                 "wawelauth.gui.server_picker.status.bound",
                 account.getProfileName() != null ? account.getProfileName() : "?");
-            GuiTransitionScheduler.transition(panel, () -> ServerAccountPickerScreen.open(targetServerData, successMessage));
+            GuiTransitionScheduler
+                .transition(panel, () -> ServerAccountPickerScreen.open(targetServerData, successMessage));
         });
         RegisterDialog registerDialog = RegisterDialog.attach(panel, success -> {
             if (Boolean.TRUE.equals(success) && trustedLocalProviderName[0] != null) {
@@ -221,8 +222,9 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
         return panel;
     }
 
-    private static void openLocalAuthAction(ServerData targetServerData, ServerCapabilities capabilities, ModularPanel panel,
-        String[] trustedLocalProviderName, LoginDialog loginDialog, RegisterDialog registerDialog, boolean register) {
+    private static void openLocalAuthAction(ServerData targetServerData, ServerCapabilities capabilities,
+        ModularPanel panel, String[] trustedLocalProviderName, LoginDialog loginDialog, RegisterDialog registerDialog,
+        boolean register) {
         if (capabilities == null) {
             return;
         }

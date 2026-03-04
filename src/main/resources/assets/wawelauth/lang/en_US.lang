@@ -202,3 +202,5 @@ wawelauth.gui.file_picker.select_file=Select File
 wawelauth.gui.file_picker.tinyfd_missing=LWJGL tinyfd not present.
 wawelauth.gui.file_picker.unavailable=Native file picker is not available on this runtime.
 wawelauth.gui.file_picker.unknown_error=Unknown picker error.
+wawelauth.gui.local_auth.remove_auth=Remove Auth
+wawelauth.gui.local_auth.status.removed=Local auth removed.

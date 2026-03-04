@@ -25,8 +25,8 @@ import net.minecraft.util.ResourceLocation;
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
-import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
+import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.data.AccountStatus;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientAccount;
@@ -224,66 +224,11 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             .background(new Rectangle().color(LIST_OUTLINE_COLOR))
             .child(accountList);
 
-        leftSidebar.child(
-            new TextWidget<>(GuiText.key("wawelauth.gui.account_manager.providers")).widthRel(1.0f)
-                .height(12))
-            .child(providerListFrame)
-            .child(
-                GuiText.fitButtonLabelMaxWidth(
-                    new ButtonWidget<>().widthRel(1.0f)
-                        .height(16),
-                    104,
-                    "wawelauth.gui.add_provider.title")
-                    .onMousePressed(mouseButton -> {
-                        addProviderDialog.open();
-                        return true;
-                    }))
-            .child(
-                new TextWidget<>(GuiText.key("wawelauth.gui.account_manager.accounts")).widthRel(1.0f)
-                    .height(12)
-                    .margin(0, 4))
-            .child(accountListFrame)
-            .child(
-                new Row().widthRel(1.0f)
-                    .height(17)
-                    .mainAxisAlignment(Alignment.MainAxis.CENTER)
-                    .collapseDisabledChild()
-                    .child(
-                        GuiText.fitButtonLabel(
-                            new ButtonWidget<>().size(52, 16)
-                                .setEnabledIf(widget -> isRegisterVisibleForSelectedProvider()),
-                            52,
-                            "wawelauth.gui.common.login")
-                            .onMousePressed(mouseButton -> {
-                                if (selectedProvider == null) return true;
-                                openLoginDialog(selectedProvider.getName());
-                                return true;
-                            }))
-                    .child(
-                        GuiText.fitButtonLabel(
-                            new ButtonWidget<>().size(108, 16)
-                                .setEnabledIf(widget -> !isRegisterVisibleForSelectedProvider()),
-                            108,
-                            "wawelauth.gui.common.login")
-                            .onMousePressed(mouseButton -> {
-                                if (selectedProvider == null) return true;
-                                openLoginDialog(selectedProvider.getName());
-                                return true;
-                            }))
-                    .child(
-                        new Widget<>().size(4, 16)
-                            .setEnabledIf(widget -> isRegisterVisibleForSelectedProvider()))
-                    .child(
-                        GuiText.fitButtonLabel(
-                            new ButtonWidget<>().size(52, 16)
-                                .setEnabledIf(widget -> isRegisterVisibleForSelectedProvider()),
-                            52,
-                            "wawelauth.gui.common.register")
-                            .onMousePressed(mouseButton -> {
-                                if (selectedProvider == null) return true;
-                                openRegisterDialog(selectedProvider.getName());
-                                return true;
-                            })));
+        if (hasFocusedLocalContext()) {
+            populateFocusedLocalSidebar(leftSidebar, accountListFrame);
+        } else {
+            populateGeneralSidebar(leftSidebar, providerListFrame, accountListFrame);
+        }
 
         Column rightPanel = new Column();
         rightPanel.expanded()
@@ -626,6 +571,18 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     .onMousePressed(mouseButton -> {
                         ensureFocusedLocalProvider(null);
                         return true;
+                    }))
+            .child(
+                GuiText.fitButtonLabelMaxWidth(
+                    new ButtonWidget<>().widthRel(1.0f)
+                        .height(16)
+                        .margin(0, 2)
+                        .setEnabledIf(widget -> selectedProvider != null),
+                    104,
+                    "wawelauth.gui.local_auth.remove_auth")
+                    .onMousePressed(mouseButton -> {
+                        removeFocusedLocalProvider();
+                        return true;
                     }));
 
         appendSharedAccountSection(leftSidebar, accountListFrame);
@@ -742,17 +699,15 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     .func_152344_a(() -> {
                         if (err != null) {
                             Throwable cause = err.getCause() != null ? err.getCause() : err;
-                            focusedLocalStatusText = GuiText.tr(
-                                "wawelauth.gui.common.failed_message",
-                                cause.getMessage());
+                            focusedLocalStatusText = GuiText
+                                .tr("wawelauth.gui.common.failed_message", cause.getMessage());
                             return;
                         }
 
                         selectedProvider = resolveProvider(provider);
                         ensureRegisterCapabilityProbe(selectedProvider);
-                        focusedLocalStatusText = GuiText.tr(
-                            "wawelauth.gui.common.ready_message",
-                            selectedProvider.getName());
+                        focusedLocalStatusText = GuiText
+                            .tr("wawelauth.gui.common.ready_message", selectedProvider.getName());
                         rebuildProviderList();
                         rebuildAccountList();
                         requestAccountListRebuild();
@@ -763,13 +718,40 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             });
     }
 
+    private void removeFocusedLocalProvider() {
+        if (selectedProvider == null) {
+            focusedLocalStatusText = GuiText.tr("wawelauth.gui.local_auth.status.trust_first");
+            return;
+        }
+
+        WawelClient client = WawelClient.instance();
+        if (client == null) {
+            focusedLocalStatusText = GuiText.tr("wawelauth.gui.common.client_not_running");
+            return;
+        }
+
+        String providerName = selectedProvider.getName();
+        try {
+            client.getProviderRegistry()
+                .removeProvider(providerName);
+            selectedProvider = null;
+            selectedAccount = null;
+            clearPreview();
+            focusedLocalStatusText = GuiText.tr("wawelauth.gui.local_auth.status.removed");
+            rebuildAccountList();
+            requestAccountListRebuild();
+        } catch (Exception e) {
+            focusedLocalStatusText = e.getMessage();
+            WawelAuth.debug("Focused local provider deletion failed: " + e.getMessage());
+        }
+    }
+
     private boolean hasFocusedLocalContext() {
         return focusedLocalServerData != null && focusedLocalCapabilities != null;
     }
 
     private boolean hasFocusedLocalMetadata() {
-        return hasFocusedLocalContext()
-            && notBlank(focusedLocalCapabilities.getLocalAuthApiRoot())
+        return hasFocusedLocalContext() && notBlank(focusedLocalCapabilities.getLocalAuthApiRoot())
             && notBlank(focusedLocalCapabilities.getLocalAuthPublicKeyFingerprint());
     }
 
@@ -788,7 +770,8 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
 
     private String getFocusedLocalServerAddress() {
         if (focusedLocalServerData != null && focusedLocalServerData.serverIP != null
-            && !focusedLocalServerData.serverIP.trim().isEmpty()) {
+            && !focusedLocalServerData.serverIP.trim()
+                .isEmpty()) {
             return focusedLocalServerData.serverIP.trim();
         }
         return GuiText.tr("wawelauth.gui.common.server");
@@ -888,7 +871,8 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             if (selectedProvider != null) {
                 ensureRegisterCapabilityProbe(selectedProvider);
                 if (focusedLocalStatusText == null || focusedLocalStatusText.isEmpty()) {
-                    focusedLocalStatusText = GuiText.tr("wawelauth.gui.common.ready_message", selectedProvider.getName());
+                    focusedLocalStatusText = GuiText
+                        .tr("wawelauth.gui.common.ready_message", selectedProvider.getName());
                 }
             } else {
                 focusedLocalStatusText = hasFocusedLocalMetadata()
