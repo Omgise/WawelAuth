@@ -35,7 +35,12 @@ public class MixinNetHandlerLoginClient {
         WawelClient client = WawelClient.instance();
         if (client == null || !client.getSessionBridge()
             .hasActiveAccount()) {
-            throw new AuthenticationException("No WawelAuth account active: cannot join server");
+            String reason = client != null ? client.getSessionBridge()
+                .getLastActivationError() : null;
+            if (reason == null) {
+                reason = "No WawelAuth account active";
+            }
+            throw new AuthenticationException(reason);
         }
         client.getSessionBridge()
             .joinServer(profile, token, serverId);

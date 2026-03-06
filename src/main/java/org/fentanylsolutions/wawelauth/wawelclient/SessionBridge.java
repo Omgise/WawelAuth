@@ -67,6 +67,7 @@ public class SessionBridge {
 
     private volatile ClientAccount activeAccount;
     private volatile ClientProvider activeProvider;
+    private volatile String lastActivationError;
     private volatile String connectedSessionServerBase;
     private volatile List<ClientProvider> trustedProviders = Collections.emptyList();
     private volatile List<PublicKey> trustedKeys = Collections.emptyList();
@@ -102,6 +103,7 @@ public class SessionBridge {
         ClientAccount account = accountDAO.findById(accountId);
         if (account == null) {
             WawelAuth.LOG.warn("Cannot activate account {}: not found", accountId);
+            this.lastActivationError = "Account not found";
             return;
         }
         if (account.getStatus() == AccountStatus.EXPIRED) {
@@ -109,6 +111,8 @@ public class SessionBridge {
                 "Cannot activate account {} ({}): token expired, re-authentication required",
                 accountId,
                 account.getProfileName());
+            this.lastActivationError = "Account '" + account.getProfileName()
+                + "' has expired, re-authentication required";
             return;
         }
 
@@ -116,11 +120,13 @@ public class SessionBridge {
         if (provider == null) {
             WawelAuth.LOG
                 .warn("Cannot activate account {}: provider '{}' not found", accountId, account.getProviderName());
+            this.lastActivationError = "Provider '" + account.getProviderName() + "' not found";
             return;
         }
 
         if (account.getProfileUuid() == null || account.getProfileName() == null) {
             WawelAuth.LOG.warn("Cannot activate account {}: no profile bound", accountId);
+            this.lastActivationError = "Account has no profile bound";
             return;
         }
 
@@ -139,6 +145,7 @@ public class SessionBridge {
 
         this.activeAccount = account;
         this.activeProvider = provider;
+        this.lastActivationError = null;
 
         // Build trusted providers: Mojang + active provider (deduplicated)
         buildTrustedProviders(provider);
@@ -151,6 +158,7 @@ public class SessionBridge {
     public void clearActiveAccount() {
         this.activeAccount = null;
         this.activeProvider = null;
+        this.lastActivationError = null;
         this.connectedSessionServerBase = null;
         this.trustedProviders = Collections.emptyList();
         this.trustedKeys = Collections.emptyList();
@@ -178,6 +186,11 @@ public class SessionBridge {
 
     public boolean hasActiveAccount() {
         return activeAccount != null && activeProvider != null;
+    }
+
+    /** Returns the reason the last {@link #activateAccount} call failed, or null. */
+    public String getLastActivationError() {
+        return lastActivationError;
     }
 
     public ClientProvider getActiveProvider() {
