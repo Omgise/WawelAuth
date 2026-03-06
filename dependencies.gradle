@@ -39,7 +39,7 @@ dependencies {
     runtimeOnlyNonPublishable("curse.maven:archaicfix-677782:6785842")
     runtimeOnlyNonPublishable(rfg.deobf("curse.maven:catalogue-vintage-1465746:7695645")) // 1.0.2-1.7.10
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:Angelica:2.0.0-alpha25:dev")
-    runtimeOnlyNonPublishable("com.github.GTNewHorizons:lwjgl3ify:3.0.14:dev")
+    //runtimeOnlyNonPublishable("com.github.GTNewHorizons:lwjgl3ify:3.0.14:dev")
     //runtimeOnlyNonPublishable(rfg.deobf("curse.maven:skinport-234948:3212017"))
 
     compileOnly("org.jetbrains:annotations:24.0.0")
