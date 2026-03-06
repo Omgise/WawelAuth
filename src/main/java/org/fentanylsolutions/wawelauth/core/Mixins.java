@@ -64,6 +64,12 @@ public class Mixins extends FentMixins {
             .side(MiscUtil.Side.CLIENT)
             .build();
 
+        // Client Mixins: address normalization
+        registry.mixin("MixinServerAddress")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
+
         // Client Mixins: session handoff + server data extension
         registry.mixin("MixinGuiConnecting")
             .phase(MixinUtil.Phase.EARLY)
