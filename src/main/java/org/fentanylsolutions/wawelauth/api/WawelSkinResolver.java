@@ -20,10 +20,12 @@ import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.client.render.SkinTextureState;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.SessionBridge;
@@ -357,9 +359,10 @@ public class WawelSkinResolver {
             entry.lookupContext = hint.lookupContext;
             switch (entry.state) {
                 case RESOLVED:
-                    if (!entry.isExpired()) {
+                    if (!entry.isExpired() && hasUsableRegisteredTexture(entry.skinLocation)) {
                         return entry.skinLocation;
                     }
+                    entry.skinLocation = STEVE;
                     entry.state = FetchState.PENDING;
                     break;
                 case FETCHING:
@@ -475,8 +478,14 @@ public class WawelSkinResolver {
                 try {
                     SkinManager skinManager = Minecraft.getMinecraft()
                         .func_152342_ad();
-                    skinManager.func_152792_a(finalTexture, MinecraftProfileTexture.Type.SKIN);
-                    entry.skinLocation = new ResourceLocation("skins/" + finalTexture.getHash());
+                    ResourceLocation registeredLocation = skinManager
+                        .func_152792_a(finalTexture, MinecraftProfileTexture.Type.SKIN);
+                    if (!hasUsableRegisteredTexture(registeredLocation)) {
+                        WawelAuth.debug("Skin registration was not usable yet for " + profileId);
+                        handleFetchFailure(entry);
+                        return;
+                    }
+                    entry.skinLocation = registeredLocation;
                     entry.state = FetchState.RESOLVED;
                     entry.resolvedAtMs = System.currentTimeMillis();
                     entry.retryCount = 0;
@@ -501,6 +510,16 @@ public class WawelSkinResolver {
             return action.get();
         }
         return sessionBridge.withLookupContext(lookupContext, action);
+    }
+
+    private static boolean hasUsableRegisteredTexture(ResourceLocation skinLocation) {
+        if (skinLocation == null) {
+            return false;
+        }
+        ITextureObject textureObject = Minecraft.getMinecraft()
+            .getTextureManager()
+            .getTexture(skinLocation);
+        return SkinTextureState.isUsable(textureObject);
     }
 
     private static ClientProvider buildEphemeralProvider(PublicKey key, String sessionServerBase,

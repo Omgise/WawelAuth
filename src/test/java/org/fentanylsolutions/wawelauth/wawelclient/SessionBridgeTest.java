@@ -87,7 +87,12 @@ public class SessionBridgeTest {
         GameProfile unsignedProfile = profileWithTextures(profileId, null);
 
         java.util.Map<String, GameProfile> cache = new java.util.HashMap<>();
-        SessionBridge.putFetchedProfileInCache(cache, "provider:alpha|" + profileId + "|U", "provider:alpha|" + profileId + "|S", unsignedProfile, false);
+        SessionBridge.putFetchedProfileInCache(
+            cache,
+            "provider:alpha|" + profileId + "|U",
+            "provider:alpha|" + profileId + "|S",
+            unsignedProfile,
+            false);
 
         Assert.assertSame(unsignedProfile, cache.get("provider:alpha|" + profileId + "|U"));
         Assert.assertNull(cache.get("provider:alpha|" + profileId + "|S"));
@@ -99,7 +104,12 @@ public class SessionBridgeTest {
         GameProfile signedProfile = profileWithTextures(profileId, "sig");
 
         java.util.Map<String, GameProfile> cache = new java.util.HashMap<>();
-        SessionBridge.putFetchedProfileInCache(cache, "provider:alpha|" + profileId + "|S", "provider:alpha|" + profileId + "|U", signedProfile, true);
+        SessionBridge.putFetchedProfileInCache(
+            cache,
+            "provider:alpha|" + profileId + "|S",
+            "provider:alpha|" + profileId + "|U",
+            signedProfile,
+            true);
 
         Assert.assertSame(signedProfile, cache.get("provider:alpha|" + profileId + "|S"));
         Assert.assertSame(signedProfile, cache.get("provider:alpha|" + profileId + "|U"));

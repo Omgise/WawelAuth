@@ -14,6 +14,7 @@ import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.client.gui.GuiText;
+import org.fentanylsolutions.wawelauth.client.gui.IServerTooltipFaceHost;
 import org.fentanylsolutions.wawelauth.client.gui.ProviderDisplayName;
 import org.fentanylsolutions.wawelauth.client.gui.ServerAccountPickerScreen;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
@@ -112,10 +113,10 @@ public class MixinServerListEntryNormal {
             StringBuilder tooltip = new StringBuilder(GuiText.tr("wawelauth.gui.server_tooltip.no_account"));
             ServerCapabilities caps = ext.getWawelCapabilities();
             if (accountId >= 0) {
-                String providerName = ext.getWawelProviderName();
+                String rawProviderName = ext.getWawelProviderName();
+                String providerName = ProviderDisplayName.displayName(rawProviderName);
                 String displayName = null;
                 java.util.UUID profileUuid = null;
-                providerName = ProviderDisplayName.displayName(providerName);
                 WawelClient client = WawelClient.instance();
                 if (client != null) {
                     ClientAccount account = client.getAccountManager()
@@ -129,6 +130,7 @@ public class MixinServerListEntryNormal {
                         if (account.getProviderName() != null && !account.getProviderName()
                             .trim()
                             .isEmpty()) {
+                            rawProviderName = account.getProviderName();
                             providerName = ProviderDisplayName.displayName(account.getProviderName());
                         }
                         profileUuid = account.getProfileUuid();
@@ -140,6 +142,10 @@ public class MixinServerListEntryNormal {
                 }
 
                 tooltip = new StringBuilder(displayName);
+                if (profileUuid != null && field_148303_c instanceof IServerTooltipFaceHost) {
+                    ((IServerTooltipFaceHost) field_148303_c)
+                        .wawelauth$setServerTooltipFace(displayName, profileUuid, rawProviderName);
+                }
                 if (providerName != null) {
                     tooltip.append("\n")
                         .append(EnumChatFormatting.GRAY)

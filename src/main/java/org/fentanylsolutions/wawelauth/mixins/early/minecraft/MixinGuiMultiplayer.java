@@ -1,37 +1,58 @@
 package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 
 import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
 
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiMultiplayer;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.Config;
+import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
 import org.fentanylsolutions.wawelauth.client.gui.AccountManagerScreen;
 import org.fentanylsolutions.wawelauth.client.gui.AuthButton;
 import org.fentanylsolutions.wawelauth.client.gui.FolderIconButton;
 import org.fentanylsolutions.wawelauth.client.gui.FolderOpenUtil;
 import org.fentanylsolutions.wawelauth.client.gui.GuiText;
+import org.fentanylsolutions.wawelauth.client.gui.IServerTooltipFaceHost;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.cleanroommc.modularui.factory.ClientGUI;
 
 @Mixin(GuiMultiplayer.class)
-public abstract class MixinGuiMultiplayer extends GuiScreen {
+public abstract class MixinGuiMultiplayer extends GuiScreen implements IServerTooltipFaceHost {
 
     @Unique
     private static final int WAWELAUTH_ACCOUNTS_BUTTON_ID = 200;
     @Unique
     private static final int WAWELAUTH_OPEN_FOLDER_BUTTON_ID = 201;
+    @Unique
+    private static final int WAWELAUTH_TOOLTIP_FACE_SIZE = 8;
+    @Unique
+    private static final int WAWELAUTH_TOOLTIP_FACE_PADDING = 4;
+    @Unique
+    private static final int WAWELAUTH_TOOLTIP_FACE_AREA_WIDTH = WAWELAUTH_TOOLTIP_FACE_SIZE
+        + WAWELAUTH_TOOLTIP_FACE_PADDING;
 
     @Unique
     private GuiButton wawelauth$openFolderButton;
+    @Unique
+    private UUID wawelauth$tooltipProfileUuid;
+    @Unique
+    private String wawelauth$tooltipDisplayName;
+    @Unique
+    private String wawelauth$tooltipProviderName;
 
     @Inject(method = "initGui", at = @At("RETURN"))
     private void wawelauth$onInitGui(CallbackInfo ci) {
@@ -56,6 +77,26 @@ public abstract class MixinGuiMultiplayer extends GuiScreen {
             x + accountsWidth + gap,
             5);
         this.buttonList.add(this.wawelauth$openFolderButton);
+    }
+
+    @Inject(method = "drawScreen", at = @At("HEAD"))
+    private void wawelauth$clearTooltipFace(int mouseX, int mouseY, float partialTicks, CallbackInfo ci) {
+        wawelauth$clearServerTooltipFace();
+    }
+
+    @Redirect(
+        method = "drawScreen",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/gui/GuiMultiplayer;func_146283_a(Ljava/util/List;II)V"))
+    private void wawelauth$drawTooltipWithFace(GuiMultiplayer instance, List<String> textLines, int x, int y) {
+        if (wawelauth$tooltipProfileUuid == null || wawelauth$tooltipDisplayName == null
+            || textLines == null
+            || textLines.isEmpty()) {
+            this.func_146283_a(textLines, x, y);
+            return;
+        }
+        wawelauth$drawHoveringTextWithFace(textLines, x, y);
     }
 
     @Inject(method = "actionPerformed", at = @At("HEAD"), cancellable = true)
@@ -83,5 +124,168 @@ public abstract class MixinGuiMultiplayer extends GuiScreen {
                     this.fontRendererObj);
             }
         }
+    }
+
+    @Override
+    public void wawelauth$setServerTooltipFace(String displayName, UUID profileUuid, String providerName) {
+        this.wawelauth$tooltipDisplayName = displayName;
+        this.wawelauth$tooltipProfileUuid = profileUuid;
+        this.wawelauth$tooltipProviderName = providerName;
+    }
+
+    @Override
+    public void wawelauth$clearServerTooltipFace() {
+        this.wawelauth$tooltipDisplayName = null;
+        this.wawelauth$tooltipProfileUuid = null;
+        this.wawelauth$tooltipProviderName = null;
+    }
+
+    @Unique
+    private void wawelauth$drawHoveringTextWithFace(List<String> textLines, int mouseX, int mouseY) {
+        if (textLines.isEmpty()) {
+            return;
+        }
+
+        int textWidth = 0;
+        for (String line : textLines) {
+            textWidth = Math.max(textWidth, this.fontRendererObj.getStringWidth(line));
+        }
+
+        int tooltipX = mouseX + 12;
+        int tooltipY = mouseY - 12;
+        int tooltipHeight = 8;
+        if (textLines.size() > 1) {
+            tooltipHeight += 2 + (textLines.size() - 1) * 10;
+        }
+
+        int totalWidth = textWidth + WAWELAUTH_TOOLTIP_FACE_AREA_WIDTH;
+        if (tooltipX + totalWidth > this.width) {
+            tooltipX -= 28 + totalWidth;
+        }
+
+        if (tooltipY + tooltipHeight + 6 > this.height) {
+            tooltipY = this.height - tooltipHeight - 6;
+        }
+
+        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL12.GL_RESCALE_NORMAL);
+        RenderHelper.disableStandardItemLighting();
+        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_LIGHTING);
+        org.lwjgl.opengl.GL11.glDisable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+
+        this.zLevel = 300.0F;
+        itemRender.zLevel = 300.0F;
+        int background = -267386864;
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY - 4,
+            tooltipX + totalWidth + 3,
+            tooltipY - 3,
+            background,
+            background);
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY + tooltipHeight + 3,
+            tooltipX + totalWidth + 3,
+            tooltipY + tooltipHeight + 4,
+            background,
+            background);
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY - 3,
+            tooltipX + totalWidth + 3,
+            tooltipY + tooltipHeight + 3,
+            background,
+            background);
+        this.drawGradientRect(
+            tooltipX - 4,
+            tooltipY - 3,
+            tooltipX - 3,
+            tooltipY + tooltipHeight + 3,
+            background,
+            background);
+        this.drawGradientRect(
+            tooltipX + totalWidth + 3,
+            tooltipY - 3,
+            tooltipX + totalWidth + 4,
+            tooltipY + tooltipHeight + 3,
+            background,
+            background);
+        int borderStart = 1347420415;
+        int borderEnd = (borderStart & 16711422) >> 1 | borderStart & -16777216;
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY - 2,
+            tooltipX - 2,
+            tooltipY + tooltipHeight + 2,
+            borderStart,
+            borderEnd);
+        this.drawGradientRect(
+            tooltipX + totalWidth + 2,
+            tooltipY - 2,
+            tooltipX + totalWidth + 3,
+            tooltipY + tooltipHeight + 2,
+            borderStart,
+            borderEnd);
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY - 3,
+            tooltipX + totalWidth + 3,
+            tooltipY - 2,
+            borderStart,
+            borderStart);
+        this.drawGradientRect(
+            tooltipX - 3,
+            tooltipY + tooltipHeight + 2,
+            tooltipX + totalWidth + 3,
+            tooltipY + tooltipHeight + 3,
+            borderEnd,
+            borderEnd);
+
+        WawelSkinResolver.drawFace(
+            wawelauth$resolveTooltipSkin(),
+            tooltipX,
+            tooltipY,
+            WAWELAUTH_TOOLTIP_FACE_SIZE,
+            WAWELAUTH_TOOLTIP_FACE_SIZE,
+            1.0F);
+
+        int textX = tooltipX + WAWELAUTH_TOOLTIP_FACE_AREA_WIDTH;
+        int lineY = tooltipY;
+        for (int i = 0; i < textLines.size(); i++) {
+            this.fontRendererObj.drawStringWithShadow(textLines.get(i), textX, lineY, -1);
+            if (i == 0) {
+                lineY += 2;
+            }
+            lineY += 10;
+        }
+
+        this.zLevel = 0.0F;
+        itemRender.zLevel = 0.0F;
+        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_LIGHTING);
+        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_DEPTH_TEST);
+        RenderHelper.enableStandardItemLighting();
+        org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL12.GL_RESCALE_NORMAL);
+    }
+
+    @Unique
+    private ResourceLocation wawelauth$resolveTooltipSkin() {
+        WawelClient client = WawelClient.instance();
+        if (client == null || this.wawelauth$tooltipProfileUuid == null) {
+            return WawelSkinResolver.STEVE;
+        }
+
+        String displayName = this.wawelauth$tooltipDisplayName != null ? this.wawelauth$tooltipDisplayName : "?";
+        if (this.wawelauth$tooltipProviderName != null && !this.wawelauth$tooltipProviderName.trim()
+            .isEmpty()) {
+            return client.getSkinResolver()
+                .getSkin(
+                    this.wawelauth$tooltipProfileUuid,
+                    displayName,
+                    this.wawelauth$tooltipProviderName,
+                    SkinRequest.DEFAULT);
+        }
+
+        return client.getSkinResolver()
+            .getSkin(this.wawelauth$tooltipProfileUuid, displayName, SkinRequest.DEFAULT);
     }
 }

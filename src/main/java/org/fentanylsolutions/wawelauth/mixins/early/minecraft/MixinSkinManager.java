@@ -11,6 +11,7 @@ import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.client.render.SkinManagerCompatImageBuffer;
+import org.fentanylsolutions.wawelauth.client.render.SkinTextureState;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -46,7 +47,7 @@ public abstract class MixinSkinManager {
         ResourceLocation resourceLocation = new ResourceLocation("skins/" + texture.getHash());
         ITextureObject existingTexture = field_152795_c.getTexture(resourceLocation);
 
-        if (existingTexture != null) {
+        if (SkinTextureState.isUsable(existingTexture)) {
             if (callback != null) {
                 callback.func_152121_a(textureType, resourceLocation);
             }
@@ -54,7 +55,10 @@ public abstract class MixinSkinManager {
             return;
         }
 
-        File cacheDir = new File(field_152796_d, texture.getHash().substring(0, 2));
+        File cacheDir = new File(
+            field_152796_d,
+            texture.getHash()
+                .substring(0, 2));
         File cacheFile = new File(cacheDir, texture.getHash());
         IImageBuffer delegate = textureType == Type.SKIN ? new ImageBufferDownload() : null;
         ThreadDownloadImageData download = new ThreadDownloadImageData(
