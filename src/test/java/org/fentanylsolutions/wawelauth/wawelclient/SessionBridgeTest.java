@@ -14,6 +14,9 @@ import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientProviderDAO;
 import org.junit.Assert;
 import org.junit.Test;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 
@@ -82,6 +85,50 @@ public class SessionBridgeTest {
     }
 
     @Test
+    public void advertisedServerWithoutMojangExcludesMojangFromConnectionTrust() {
+        InMemoryProviderDao providerDao = new InMemoryProviderDao();
+        ClientProvider mojang = provider("Mojang", "https://authserver.mojang.com");
+        ClientProvider alpha = provider("Alpha", "https://alpha.example/authserver");
+        providerDao.create(mojang);
+        providerDao.create(alpha);
+
+        SessionBridge bridge = new SessionBridge(
+            null,
+            providerDao,
+            new InMemoryAccountDao(),
+            null,
+            launcherSession("launcher-token"));
+
+        List<ClientProvider> trusted = bridge
+            .buildConnectionTrustedProviders(alpha, advertisedCapabilities("https://alpha.example/authserver"));
+
+        Assert.assertTrue(containsProvider(trusted, "Alpha"));
+        Assert.assertFalse(containsProvider(trusted, "Mojang"));
+    }
+
+    @Test
+    public void advertisedServerWithoutMojangDisablesVanillaTextureTrustInLookupContext() {
+        InMemoryProviderDao providerDao = new InMemoryProviderDao();
+        providerDao.create(provider("Mojang", "https://authserver.mojang.com"));
+        providerDao.create(provider("Alpha", "https://alpha.example/authserver"));
+
+        SessionBridge bridge = new SessionBridge(
+            null,
+            providerDao,
+            new InMemoryAccountDao(),
+            null,
+            launcherSession("launcher-token"));
+
+        SessionBridge.LookupContext context = bridge
+            .createServerLookupContext(advertisedCapabilities("https://alpha.example/authserver"), true);
+
+        Assert.assertFalse(
+            bridge.withLookupContext(
+                context,
+                () -> bridge.isVanillaTextureTrustAllowed(UUID.fromString("feedfeed-feed-feed-feed-feedfeedfeed"))));
+    }
+
+    @Test
     public void unsignedProfilesDoNotPopulateSignedCacheEntries() {
         UUID profileId = UUID.fromString("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb");
         GameProfile unsignedProfile = profileWithTextures(profileId, null);
@@ -125,9 +172,31 @@ public class SessionBridgeTest {
     }
 
     private static ClientProvider provider(String name) {
+        return provider(name, null);
+    }
+
+    private static ClientProvider provider(String name, String authServerUrl) {
         ClientProvider provider = new ClientProvider();
         provider.setName(name);
+        provider.setAuthServerUrl(authServerUrl);
         return provider;
+    }
+
+    private static ServerCapabilities advertisedCapabilities(String acceptedAuthServerUrl) {
+        JsonObject payload = new JsonObject();
+        JsonArray urls = new JsonArray();
+        urls.add(new JsonPrimitive(acceptedAuthServerUrl));
+        payload.add("acceptedAuthServerUrls", urls);
+        return ServerCapabilities.fromPayload(payload, System.currentTimeMillis());
+    }
+
+    private static boolean containsProvider(List<ClientProvider> providers, String name) {
+        for (ClientProvider provider : providers) {
+            if (name.equals(provider.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static GameProfile profileWithTextures(UUID profileId, String signature) {

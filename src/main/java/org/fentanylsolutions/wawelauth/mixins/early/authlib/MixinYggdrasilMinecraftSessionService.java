@@ -47,8 +47,9 @@ public class MixinYggdrasilMinecraftSessionService {
     /**
      * Redirect Property.isSignatureValid(PublicKey) in getTextures().
      *
-     * Try the Mojang key first (fast path for vanilla), then try the
-     * profile-scoped trusted provider keys selected by SessionBridge.
+     * Try the Mojang key only when the current lookup context permits
+     * vanilla fallback, then try the profile-scoped trusted provider keys
+     * selected by SessionBridge.
      */
     @Redirect(
         method = "getTextures",
@@ -57,14 +58,16 @@ public class MixinYggdrasilMinecraftSessionService {
             target = "Lcom/mojang/authlib/properties/Property;isSignatureValid(Ljava/security/PublicKey;)Z"))
     private boolean wawelauth$verifyScopedKey(Property property, PublicKey mojangKey, GameProfile profile,
         boolean requireSecure) {
-        // Try Mojang key first (fast path, covers vanilla case)
-        if (property.isSignatureValid(mojangKey)) return true;
-
-        // Try WawelAuth keys:
-        // - active connection trusted keys during gameplay
-        // - all configured provider keys in UI/off-session contexts
         WawelClient client = WawelClient.instance();
-        if (client == null) return false;
+        if (client == null) {
+            return property.isSignatureValid(mojangKey);
+        }
+
+        if (client.getSessionBridge()
+            .isVanillaTextureTrustAllowed(profile) && property.isSignatureValid(mojangKey)) {
+            return true;
+        }
+
         for (PublicKey key : client.getSessionBridge()
             .getTextureVerificationKeys(profile)) {
             if (property.isSignatureValid(key)) return true;
@@ -79,7 +82,8 @@ public class MixinYggdrasilMinecraftSessionService {
      * redirect handler takes only the static method's arg (String url).
      * No instance parameter.
      *
-     * Check vanilla Mojang domains plus the profile-scoped trusted provider
+     * Check vanilla Mojang domains only when the current lookup context
+     * permits vanilla fallback, plus the profile-scoped trusted provider
      * skin domains selected by SessionBridge.
      */
     @Redirect(

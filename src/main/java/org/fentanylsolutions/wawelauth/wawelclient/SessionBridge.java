@@ -65,7 +65,6 @@ public class SessionBridge {
 
     /** The launcher's original session, captured at construction. */
     private final Session launcherSession;
-    private final boolean launcherSessionAllowsMojangFallback;
 
     private volatile ClientAccount activeAccount;
     private volatile ClientProvider activeProvider;
@@ -96,7 +95,6 @@ public class SessionBridge {
         this.accountDAO = accountDAO;
         this.accountManager = accountManager;
         this.launcherSession = launcherSession;
-        this.launcherSessionAllowsMojangFallback = isUsableLauncherSession(this.launcherSession);
         this.profileFetchExecutor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "WawelAuth-ProfileFetch");
             t.setDaemon(true);
@@ -162,7 +160,7 @@ public class SessionBridge {
         this.activeProvider = provider;
         this.lastActivationError = null;
 
-        // Build trusted providers: Mojang + active provider (deduplicated)
+        // Build a provisional trust set until live server capabilities arrive.
         buildTrustedProviders(provider);
 
         WawelAuth
@@ -348,12 +346,9 @@ public class SessionBridge {
     /**
      * Build connection-trusted providers from live server capabilities.
      *
-     * Priority:
-     * 1) Active account provider (always)
-     * 2) Mojang provider (always, when present)
-     * 3) Providers matching server-accepted auth URLs
-     * 4) Providers matching advertised local-auth fingerprint
-     * 5) Ephemeral local provider from capabilities (if no persisted match)
+     * For unadvertised/vanilla servers, keep the pre-capability trust model:
+     * active provider plus Mojang. For advertised WawelAuth servers, trust only
+     * providers explicitly matched by the server's advertised policy.
      */
     public void applyServerCapabilities(ServerCapabilities capabilities) {
         ClientProvider active = this.activeProvider;
@@ -361,18 +356,7 @@ public class SessionBridge {
             return;
         }
         this.connectedSessionServerBase = resolveConnectedSessionServerBase(capabilities);
-
-        List<ClientProvider> resolved = new ArrayList<>();
-        LinkedHashSet<String> seen = new LinkedHashSet<>();
-
-        addTrustedProvider(resolved, seen, providerDAO.findByName(MOJANG_PROVIDER_NAME));
-        addTrustedProvider(resolved, seen, active);
-
-        for (ClientProvider provider : resolveTrustedProvidersFromCapabilities(capabilities)) {
-            addTrustedProvider(resolved, seen, provider);
-        }
-
-        setTrustedProviders(resolved);
+        setTrustedProviders(buildConnectionTrustedProviders(active, capabilities));
     }
 
     /**
@@ -542,9 +526,37 @@ public class SessionBridge {
         return parsePublicKeys(providers);
     }
 
+    public boolean isVanillaTextureTrustAllowed(GameProfile profile) {
+        return isVanillaTextureTrustAllowed(profile != null ? profile.getId() : null);
+    }
+
+    boolean isVanillaTextureTrustAllowed(UUID profileId) {
+        if (isClientWorldLoaded()) {
+            return containsMojangProvider(trustedProviders);
+        }
+
+        LookupContext requestContext = activeLookupContext.get();
+        if (requestContext != null) {
+            return requestContext.allowVanillaFallback && containsMojangProvider(requestContext.trustedProviders);
+        }
+
+        MenuProfileLookupContext menuLookup = resolveMenuProfileLookup(profileId);
+        if (menuLookup != null) {
+            return menuLookup.isVanillaFallbackAllowed() && containsMojangProvider(menuLookup.getTrustedProviders());
+        }
+
+        ClientProvider provider = resolveProviderForProfile(profileId);
+        if (provider != null) {
+            return isMojangProvider(provider);
+        }
+
+        return true;
+    }
+
     /**
      * Check if a URL's domain is whitelisted by any trusted provider
-     * for the current connection. Also checks vanilla Mojang domains.
+     * for the current connection. Vanilla Mojang domains are accepted only
+     * when the current lookup context allows vanilla fallback.
      */
     public boolean isWhitelistedDomain(String url) {
         return isWhitelistedDomain(url, null);
@@ -559,9 +571,10 @@ public class SessionBridge {
             String host = uri.getHost();
             if (host == null) return false;
 
-            // Check vanilla Mojang domains
-            for (String domain : VANILLA_SKIN_DOMAINS) {
-                if (host.endsWith(domain)) return true;
+            if (isVanillaTextureTrustAllowed(profile != null ? profile.getId() : null)) {
+                for (String domain : VANILLA_SKIN_DOMAINS) {
+                    if (host.endsWith(domain)) return true;
+                }
             }
 
             List<ClientProvider> providers = resolveTextureProviders(profile != null ? profile.getId() : null);
@@ -705,14 +718,13 @@ public class SessionBridge {
             return Collections.singletonList(provider);
         }
 
-        // Mojang fallback for profiles with no explicit provider context.
-        // Without this, textures signed by Mojang would fail verification
-        // in menu/tooltip contexts (e.g. vanilla servers in the server list).
-        if (launcherSessionAllowsMojangFallback) {
-            ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);
-            if (mojang != null) {
-                return Collections.singletonList(mojang);
-            }
+        // Keep Mojang's verification context available even without a usable
+        // launcher session. When SkinRequest allows vanilla fallback, authlib
+        // can still resolve public profile textures from the client's default
+        // session service, and those textures must pass signature/domain checks.
+        ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);
+        if (mojang != null) {
+            return Collections.singletonList(mojang);
         }
 
         return Collections.emptyList();
@@ -735,8 +747,7 @@ public class SessionBridge {
             return new MenuProfileLookupContext(sessionBase, null, trusted, false);
         }
 
-        boolean allowVanilla = allowVanillaFallback && (capabilities == null || !capabilities.isWawelAuthAdvertised())
-            && launcherSessionAllowsMojangFallback;
+        boolean allowVanilla = allowVanillaFallback && (capabilities == null || !capabilities.isWawelAuthAdvertised());
         if (allowVanilla && providerDAO != null) {
             addTrustedProvider(trusted, seen, providerDAO.findByName(MOJANG_PROVIDER_NAME));
         }
@@ -843,7 +854,8 @@ public class SessionBridge {
     private void buildTrustedProviders(ClientProvider activeProvider) {
         List<ClientProvider> providers = new ArrayList<>();
 
-        // Always include Mojang
+        // Before capability detection runs, keep vanilla-compatible trust so
+        // normal servers and the main menu still behave like stock authlib.
         if (!MOJANG_PROVIDER_NAME.equals(activeProvider.getName())) {
             ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);
             if (mojang != null) {
@@ -855,6 +867,23 @@ public class SessionBridge {
 
         this.trustedProviders = providers;
         this.trustedKeys = parsePublicKeys(providers);
+    }
+
+    List<ClientProvider> buildConnectionTrustedProviders(ClientProvider activeProvider,
+        ServerCapabilities capabilities) {
+        List<ClientProvider> resolved = new ArrayList<>();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+
+        if (capabilities == null || !capabilities.isWawelAuthAdvertised()) {
+            addTrustedProvider(resolved, seen, providerDAO.findByName(MOJANG_PROVIDER_NAME));
+            addTrustedProvider(resolved, seen, activeProvider);
+        }
+
+        for (ClientProvider provider : resolveTrustedProvidersFromCapabilities(capabilities)) {
+            addTrustedProvider(resolved, seen, provider);
+        }
+
+        return resolved;
     }
 
     private static void addTrustedProvider(List<ClientProvider> providers, Set<String> seen, ClientProvider provider) {
@@ -1108,6 +1137,26 @@ public class SessionBridge {
 
     private static boolean isMojangProvider(ClientProvider provider) {
         return provider != null && MOJANG_PROVIDER_NAME.equals(provider.getName());
+    }
+
+    private static boolean containsMojangProvider(List<ClientProvider> providers) {
+        if (providers == null || providers.isEmpty()) {
+            return false;
+        }
+        for (ClientProvider provider : providers) {
+            if (isMojangProvider(provider)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isClientWorldLoaded() {
+        try {
+            return Minecraft.getMinecraft().theWorld != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean isUsableLauncherSession(Session session) {
