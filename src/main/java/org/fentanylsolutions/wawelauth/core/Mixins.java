@@ -143,6 +143,12 @@ public class Mixins extends FentMixins {
             .side(MiscUtil.Side.BOTH)
             .build();
 
+        // Compat
+        registry.mixin("MixinModEventHandlerClient")
+            .modid("hbm")
+            .phase(MixinUtil.Phase.LATE)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
     }
 
     public static java.util.List<String> getEarlyMixinsForLoader() {

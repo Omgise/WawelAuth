@@ -8,6 +8,7 @@ import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeClientHandler;
 import org.fentanylsolutions.wawelauth.client.gui.GuiTransitionScheduler;
 import org.fentanylsolutions.wawelauth.client.gui.SkinResolverClientHandler;
 import org.fentanylsolutions.wawelauth.client.gui.WawelAuthKeybind;
+import org.fentanylsolutions.wawelauth.client.render.NTMArmorCompat;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelPingClientHooks;
@@ -47,6 +48,9 @@ public class ClientProxy extends CommonProxy {
         GuiTransitionScheduler.register();
         AnimatedCapeClientHandler.register();
         SkinResolverClientHandler.register();
+
+        // Compat
+        NTMArmorCompat.register();
 
         // Register keybind for account manager
         WawelAuthKeybind keybind = new WawelAuthKeybind();

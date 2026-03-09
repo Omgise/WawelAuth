@@ -105,6 +105,31 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
     private static final int LAYER_PART_LEFT_LEG = 5;
 
     @Override
+    public ModelRenderer wawelAuth$getBodyWear() {
+        return this.wawelauth$bodyWear;
+    }
+
+    @Override
+    public ModelRenderer wawelAuth$getRightArmWear() {
+        return this.wawelauth$rightArmWear;
+    }
+
+    @Override
+    public ModelRenderer wawelAuth$getLeftArmWear() {
+        return this.wawelauth$leftArmWear;
+    }
+
+    @Override
+    public ModelRenderer wawelAuth$getRightLegWear() {
+        return this.wawelauth$rightLegWear;
+    }
+
+    @Override
+    public ModelRenderer wawelAuth$getLeftLegWear() {
+        return this.wawelauth$leftLegWear;
+    }
+
+    @Override
     public void wawelauth$initModern() {
         ModelBiped self = (ModelBiped) (Object) this;
 

@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.client.render;
 
+import net.minecraft.client.model.ModelRenderer;
+
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DState;
 
 /**
@@ -45,4 +47,14 @@ public interface IModelBipedModernExt {
      * Get the current 3D skin layer state, or null if 3D layers are inactive.
      */
     SkinLayers3DState wawelauth$getSkinLayers3D();
+
+    ModelRenderer wawelAuth$getBodyWear();
+
+    ModelRenderer wawelAuth$getRightArmWear();
+
+    ModelRenderer wawelAuth$getLeftArmWear();
+
+    ModelRenderer wawelAuth$getRightLegWear();
+
+    ModelRenderer wawelAuth$getLeftLegWear();
 }
