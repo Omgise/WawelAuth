@@ -3,6 +3,7 @@ package org.fentanylsolutions.wawelauth.wawelnet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.fentanylsolutions.fentlib.services.http.ReverseProxyHttpHandler;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.wawelserver.WawelServer;
 
@@ -60,6 +61,9 @@ public class HttpRequestHandler extends SimpleChannelInboundHandler<FullHttpRequ
 
         HttpRouter.MatchResult match = router.match(request.getMethod(), path);
         if (match == null) {
+            if (ReverseProxyHttpHandler.tryHandle(ctx, request)) {
+                return;
+            }
             sendJson(
                 ctx,
                 HttpResponseStatus.NOT_FOUND,
