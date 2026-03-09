@@ -39,6 +39,7 @@ dependencies {
     runtimeOnlyNonPublishable("curse.maven:archaicfix-677782:6785842")
     runtimeOnlyNonPublishable(rfg.deobf("curse.maven:catalogue-vintage-1465746:7695645")) // 1.0.2-1.7.10
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:Angelica:2.1.1:dev")
+    //runtimeOnlyNonPublishable("org.fentanylsolutions.vintagedamageindicators:VintageDamageIndicators:test2")
     //runtimeOnlyNonPublishable("com.github.GTNewHorizons:lwjgl3ify:3.0.14:dev")
     //runtimeOnlyNonPublishable(rfg.deobf("curse.maven:skinport-234948:3212017"))
 
@@ -49,7 +50,7 @@ dependencies {
 
     // Keep MUI2 available in dev runtime (client), but do not publish it as a hard dependency.
     devOnlyNonPublishable("com.github.GTNewHorizons:ModularUI2:2.3.45-1.7.10:dev")
-    devOnlyNonPublishable "org.fentanylsolutions.tabfaces:TabFaces:test4:dev"
+    devOnlyNonPublishable "org.fentanylsolutions.tabfaces:TabFaces:1.0.15:dev"
 
     shadowImplementation("org.xerial:sqlite-jdbc:3.51.2.0")
 
