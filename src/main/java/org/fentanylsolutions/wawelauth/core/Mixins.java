@@ -145,6 +145,13 @@ public class Mixins extends FentMixins {
             .side(MiscUtil.Side.CLIENT)
             .build();
 
+        registry.mixin("MixinPlayerHeadIcon")
+            .modid("serverutilities")
+            .extraModid("ServerUtilities")
+            .phase(MixinUtil.Phase.LATE)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
+
         registry.mixin("MixinDynmapForgePlayer")
             .modid("dynmap")
             .extraModid("Dynmap")

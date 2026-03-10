@@ -52,6 +52,7 @@ dependencies {
     // Pure compile
     compileOnly("org.jetbrains:annotations:26.1.0")
     compileOnly("com.github.GTNewHorizons:GTNH-Web-Map:0.3.46:dev")
+    compileOnly("com.github.GTNewHorizons:ServerUtilities:2.2.18:dev")
 
     // Shadow
 

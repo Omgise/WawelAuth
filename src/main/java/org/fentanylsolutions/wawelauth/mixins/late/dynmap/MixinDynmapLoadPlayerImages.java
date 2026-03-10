@@ -156,7 +156,8 @@ public abstract class MixinDynmapLoadPlayerImages {
         }
     }
 
-    private static void write(MapStorage storage, String playername, PlayerFaces.FaceType faceType, BufferedImage image) {
+    private static void write(MapStorage storage, String playername, PlayerFaces.FaceType faceType,
+        BufferedImage image) {
         if (image == null) {
             return;
         }
