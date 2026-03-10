@@ -352,9 +352,6 @@ public class SessionBridge {
      */
     public void applyServerCapabilities(ServerCapabilities capabilities) {
         ClientProvider active = this.activeProvider;
-        if (active == null) {
-            return;
-        }
         this.connectedSessionServerBase = resolveConnectedSessionServerBase(capabilities);
         setTrustedProviders(buildConnectionTrustedProviders(active, capabilities));
     }

@@ -49,6 +49,10 @@ public class Mixins extends FentMixins {
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.SERVER)
             .build();
+        registry.mixin("MixinServerConfigurationManagerJoinSync")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.SERVER)
+            .build();
         registry.mixin("MixinCommandBanIpIpv6")
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.SERVER)
@@ -80,6 +84,10 @@ public class Mixins extends FentMixins {
             .side(MiscUtil.Side.CLIENT)
             .build();
         registry.mixin("MixinServerData")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
+        registry.mixin("MixinNetHandlerPlayClientJoinSync")
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)
             .build();
