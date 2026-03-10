@@ -17,7 +17,7 @@ import betterquesting.api2.utils.EntityPlayerPreview;
 @Mixin(value = EntityPlayerPreview.class, priority = 999, remap = false)
 public abstract class MixinEntityPlayerPreview {
 
-    @Inject(method = "getLocationSkin", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "func_110306_p", at = @At("HEAD"), cancellable = true, remap = false)
     private void wawelauth$useResolvedSkin(CallbackInfoReturnable<ResourceLocation> cir) {
         WawelClient client = WawelClient.instance();
         if (client == null) {
