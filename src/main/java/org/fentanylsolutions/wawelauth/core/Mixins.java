@@ -147,12 +147,21 @@ public class Mixins extends FentMixins {
 
         registry.mixin("MixinDynmapForgePlayer")
             .modid("dynmap")
+            .extraModid("Dynmap")
+            .extraModid("gtnh-web-map")
+            .phase(MixinUtil.Phase.LATE)
+            .side(MiscUtil.Side.SERVER)
+            .build();
+        registry.mixin("AccessorPlayerFaces")
+            .modid("dynmap")
+            .extraModid("Dynmap")
             .extraModid("gtnh-web-map")
             .phase(MixinUtil.Phase.LATE)
             .side(MiscUtil.Side.SERVER)
             .build();
         registry.mixin("MixinDynmapLoadPlayerImages")
             .modid("dynmap")
+            .extraModid("Dynmap")
             .extraModid("gtnh-web-map")
             .phase(MixinUtil.Phase.LATE)
             .side(MiscUtil.Side.SERVER)
