@@ -64,6 +64,7 @@ public class MixinServerListEntryNormal {
     private static final int ACCOUNT_DECORATION_GAP = 2;
 
     private static final ResourceLocation ICON_AUTHED = new ResourceLocation("wawelauth", "textures/authed.png");
+    private static final ResourceLocation ICON_LOADING = new ResourceLocation("wawelauth", "textures/loading.png");
     private static final ResourceLocation ICON_UNAUTHED = new ResourceLocation("wawelauth", "textures/unauthed.png");
     private static final ResourceLocation ICON_OUTLINE = new ResourceLocation("wawelauth", "textures/outline.png");
 
@@ -86,6 +87,7 @@ public class MixinServerListEntryNormal {
         WawelClient client = WawelClient.instance();
         ClientAccount selectedAccount = null;
         AccountStatus selectedStatus = null;
+        boolean wawelAuthLoading = field_148301_e.field_78841_f && field_148301_e.pingToServer == -2L;
         boolean wawelAuthAdvertised = caps != null && caps.getUpdatedAtMs() > 0L && caps.isWawelAuthAdvertised();
         if (accountId >= 0 && client != null) {
             selectedAccount = client.getAccountManager()
@@ -124,7 +126,7 @@ public class MixinServerListEntryNormal {
                     16.0f);
             }
             field_148300_d.getTextureManager()
-                .bindTexture(wawelAuthAdvertised ? ICON_AUTHED : ICON_UNAUTHED);
+                .bindTexture(wawelAuthLoading ? ICON_LOADING : (wawelAuthAdvertised ? ICON_AUTHED : ICON_UNAUTHED));
             Gui.func_146110_a(
                 /* drawModalRectWithCustomSizedTexture */iconX,
                 iconY,
