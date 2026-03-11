@@ -81,10 +81,12 @@ public class MixinServerListEntryNormal {
         int iconX = x + listWidth - ICON_OFFSET_FROM_RIGHT;
         int iconY = y + ICON_Y_OFFSET;
 
+        ServerCapabilities caps = ext.getWawelCapabilities();
         long accountId = ext.getWawelAccountId();
         WawelClient client = WawelClient.instance();
         ClientAccount selectedAccount = null;
         AccountStatus selectedStatus = null;
+        boolean wawelAuthAdvertised = caps != null && caps.getUpdatedAtMs() > 0L && caps.isWawelAuthAdvertised();
         if (accountId >= 0 && client != null) {
             selectedAccount = client.getAccountManager()
                 .getAccount(accountId);
@@ -122,7 +124,7 @@ public class MixinServerListEntryNormal {
                     16.0f);
             }
             field_148300_d.getTextureManager()
-                .bindTexture(accountId >= 0 ? ICON_AUTHED : ICON_UNAUTHED);
+                .bindTexture(wawelAuthAdvertised ? ICON_AUTHED : ICON_UNAUTHED);
             Gui.func_146110_a(
                 /* drawModalRectWithCustomSizedTexture */iconX,
                 iconY,
@@ -171,7 +173,6 @@ public class MixinServerListEntryNormal {
         }
 
         if (iconHovering) {
-            ServerCapabilities caps = ext.getWawelCapabilities();
             ServerCapabilities localAuthCaps = ServerBindingPersistence
                 .getEffectiveLocalAuthCapabilities(field_148301_e);
             boolean localAuthAvailable = isLocalAuthAvailable(localAuthCaps);
@@ -253,33 +254,45 @@ public class MixinServerListEntryNormal {
                 authApiRoot = selectedProvider != null ? normalizeTooltipValue(selectedProvider.getApiRoot()) : null;
             }
 
-            if (authDisplayName != null) {
-                authLines.add(
-                    localAuthAvailable
-                        ? EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.server_tooltip.local_auth")
-                            + EnumChatFormatting.GOLD
-                            + authDisplayName
-                        : EnumChatFormatting.GRAY
-                            + GuiText.tr("wawelauth.gui.server_tooltip.provider_tag", authDisplayName));
-            }
-            if (authApiRoot != null) {
-                authLines.add(
-                    EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.common.api_root_label")
-                        + EnumChatFormatting.GOLD
-                        + authApiRoot);
-            }
-
             List<String> availableProviders = collectAvailableProviderHosts(caps);
+            boolean noPingData = caps == null || caps.getUpdatedAtMs() <= 0L;
             boolean providersUnknown = caps != null && caps.getUpdatedAtMs() > 0L
                 && !caps.isWawelAuthAdvertised()
                 && availableProviders.isEmpty();
-            if (!availableProviders.isEmpty() || providersUnknown) {
-                authLines.add(EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.server_tooltip.available_providers"));
-                if (providersUnknown) {
-                    authLines.add(EnumChatFormatting.GRAY + "- " + GuiText.tr("wawelauth.gui.common.unknown"));
-                } else {
-                    for (String providerHost : availableProviders) {
-                        authLines.add(EnumChatFormatting.AQUA + "- " + providerHost);
+            boolean unknownProvider = !localAuthAvailable && providersUnknown
+                && authApiRoot == null
+                && (authDisplayName == null || "?".equals(authDisplayName));
+            boolean suppressNoPingProviderRow = !localAuthAvailable && noPingData
+                && authApiRoot == null
+                && !notBlank(rawProviderName);
+
+            if (unknownProvider) {
+                authLines.add(EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.server_tooltip.unknown_provider"));
+            } else {
+                if (authDisplayName != null && !suppressNoPingProviderRow) {
+                    authLines.add(
+                        localAuthAvailable
+                            ? EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.server_tooltip.local_auth")
+                                + EnumChatFormatting.GOLD
+                                + authDisplayName
+                            : EnumChatFormatting.GRAY
+                                + GuiText.tr("wawelauth.gui.server_tooltip.provider_tag", authDisplayName));
+                }
+                if (authApiRoot != null) {
+                    authLines.add(
+                        EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.common.api_root_label")
+                            + EnumChatFormatting.GOLD
+                            + authApiRoot);
+                }
+                if (!availableProviders.isEmpty() || providersUnknown) {
+                    authLines
+                        .add(EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.server_tooltip.available_providers"));
+                    if (providersUnknown) {
+                        authLines.add(EnumChatFormatting.GRAY + "- " + GuiText.tr("wawelauth.gui.common.unknown"));
+                    } else {
+                        for (String providerHost : availableProviders) {
+                            authLines.add(EnumChatFormatting.AQUA + "- " + providerHost);
+                        }
                     }
                 }
             }
