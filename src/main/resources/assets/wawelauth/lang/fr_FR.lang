@@ -115,6 +115,7 @@ wawelauth.gui.server_tooltip.account_selected=Wawel Auth : %s
 wawelauth.gui.server_tooltip.available_providers=Fournisseurs disponibles :
 wawelauth.gui.server_tooltip.no_account=Wawel Auth : aucun compte sélectionné
 wawelauth.gui.server_tooltip.provider_tag=Wawel Auth [%s]
+wawelauth.gui.server_tooltip.shift_local_auth=Maj-clic pour gérer l'auth locale
 
 wawelauth.gui.account_manager.accounts=Comptes
 wawelauth.gui.account_manager.cape=Cape

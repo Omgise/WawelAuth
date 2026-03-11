@@ -13,16 +13,19 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.ResourceLocation;
 
+import org.fentanylsolutions.wawelauth.client.gui.AccountManagerScreen;
 import org.fentanylsolutions.wawelauth.client.gui.GuiText;
 import org.fentanylsolutions.wawelauth.client.gui.IServerTooltipFaceHost;
 import org.fentanylsolutions.wawelauth.client.gui.ProviderDisplayName;
 import org.fentanylsolutions.wawelauth.client.gui.ServerAccountPickerScreen;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
+import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.data.AccountStatus;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientAccount;
 import org.fentanylsolutions.wawelauth.wawelcore.util.NetworkAddressUtil;
+import org.lwjgl.input.Keyboard;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -112,6 +115,7 @@ public class MixinServerListEntryNormal {
         if (isHovering) {
             StringBuilder tooltip = new StringBuilder(GuiText.tr("wawelauth.gui.server_tooltip.no_account"));
             ServerCapabilities caps = ext.getWawelCapabilities();
+            boolean localAuthAvailable = isLocalAuthAvailable(field_148301_e);
             if (accountId >= 0) {
                 String rawProviderName = ext.getWawelProviderName();
                 String providerName = ProviderDisplayName.displayName(rawProviderName);
@@ -187,6 +191,11 @@ public class MixinServerListEntryNormal {
                     }
                 }
             }
+            if (localAuthAvailable) {
+                tooltip.append("\n\n")
+                    .append(EnumChatFormatting.GRAY)
+                    .append(GuiText.tr("wawelauth.gui.server_tooltip.shift_local_auth"));
+            }
             field_148303_c.func_146793_a(tooltip.toString()); // GuiScreen.setToolTip
         }
     }
@@ -203,9 +212,32 @@ public class MixinServerListEntryNormal {
             && relY >= ICON_Y_OFFSET
             && relY < ICON_Y_OFFSET + ICON_HEIGHT) {
 
+            if (isShiftDown() && isLocalAuthAvailable(field_148301_e)) {
+                AccountManagerScreen.openForLocalAuth(field_148301_e);
+                cir.setReturnValue(true);
+                return;
+            }
+
             ServerAccountPickerScreen.open(field_148301_e);
             cir.setReturnValue(true);
         }
+    }
+
+    private static boolean isShiftDown() {
+        return Keyboard.isKeyDown(Keyboard.KEY_LSHIFT) || Keyboard.isKeyDown(Keyboard.KEY_RSHIFT);
+    }
+
+    private static boolean isLocalAuthAvailable(ServerData serverData) {
+        ServerCapabilities localAuthCapabilities = ServerBindingPersistence
+            .getEffectiveLocalAuthCapabilities(serverData);
+        return localAuthCapabilities != null && localAuthCapabilities.isLocalAuthSupported()
+            && notBlank(localAuthCapabilities.getLocalAuthApiRoot())
+            && notBlank(localAuthCapabilities.getLocalAuthPublicKeyFingerprint());
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.trim()
+            .isEmpty();
     }
 
     private static List<String> collectAvailableProviderHosts(ServerCapabilities caps) {
