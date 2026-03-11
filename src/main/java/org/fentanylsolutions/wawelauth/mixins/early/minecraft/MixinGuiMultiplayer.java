@@ -55,7 +55,6 @@ public abstract class MixinGuiMultiplayer extends GuiScreen implements IServerTo
     @Unique
     private static final int WAWELAUTH_TOOLTIP_FACE_AREA_WIDTH = WAWELAUTH_TOOLTIP_FACE_SIZE
         + WAWELAUTH_TOOLTIP_FACE_PADDING;
-
     @Unique
     private GuiButton wawelauth$openFolderButton;
     @Unique

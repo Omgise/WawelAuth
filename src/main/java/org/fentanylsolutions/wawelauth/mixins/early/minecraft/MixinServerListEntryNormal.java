@@ -13,11 +13,14 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.ResourceLocation;
 
+import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
 import org.fentanylsolutions.wawelauth.client.gui.AccountManagerScreen;
 import org.fentanylsolutions.wawelauth.client.gui.GuiText;
 import org.fentanylsolutions.wawelauth.client.gui.IServerTooltipFaceHost;
 import org.fentanylsolutions.wawelauth.client.gui.ProviderDisplayName;
 import org.fentanylsolutions.wawelauth.client.gui.ServerAccountPickerScreen;
+import org.fentanylsolutions.wawelauth.client.gui.StatusColors;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
@@ -56,6 +59,9 @@ public class MixinServerListEntryNormal {
     private static final int ICON_HEIGHT = 17;
     private static final int ICON_OFFSET_FROM_RIGHT = 34; // width + 18 px gap to ping icon
     private static final int ICON_Y_OFFSET = 10;
+    private static final int ACCOUNT_HEAD_SIZE = 12;
+    private static final int ACCOUNT_STATUS_SIZE = 8;
+    private static final int ACCOUNT_DECORATION_GAP = 2;
 
     private static final ResourceLocation ICON_AUTHED = new ResourceLocation("wawelauth", "textures/authed.png");
     private static final ResourceLocation ICON_UNAUTHED = new ResourceLocation("wawelauth", "textures/unauthed.png");
@@ -76,15 +82,33 @@ public class MixinServerListEntryNormal {
         int iconY = y + ICON_Y_OFFSET;
 
         long accountId = ext.getWawelAccountId();
-        boolean isHovering = mouseX >= iconX && mouseX < iconX + ICON_WIDTH
-            && mouseY >= iconY
-            && mouseY < iconY + ICON_HEIGHT;
+        WawelClient client = WawelClient.instance();
+        ClientAccount selectedAccount = null;
+        AccountStatus selectedStatus = null;
+        if (accountId >= 0 && client != null) {
+            selectedAccount = client.getAccountManager()
+                .getAccount(accountId);
+            selectedStatus = client.getAccountManager()
+                .getAccountStatus(accountId);
+        }
+
+        int statusX = iconX - ACCOUNT_DECORATION_GAP - ACCOUNT_STATUS_SIZE;
+        int statusY = iconY + (ICON_HEIGHT - ACCOUNT_STATUS_SIZE) / 2;
+        int headX = statusX - ACCOUNT_DECORATION_GAP - ACCOUNT_HEAD_SIZE;
+        int headY = iconY + (ICON_HEIGHT - ACCOUNT_HEAD_SIZE) / 2;
+
+        boolean iconHovering = isMouseWithin(mouseX, mouseY, iconX, iconY, ICON_WIDTH, ICON_HEIGHT);
+        boolean statusHovering = selectedAccount != null
+            && isMouseWithin(mouseX, mouseY, statusX, statusY, ACCOUNT_STATUS_SIZE, ACCOUNT_STATUS_SIZE);
+        boolean headHovering = selectedAccount != null
+            && isMouseWithin(mouseX, mouseY, headX, headY, ACCOUNT_HEAD_SIZE, ACCOUNT_HEAD_SIZE);
+        boolean shiftDown = isShiftDown();
 
         // Draw legacy textured indicator (ported from WawelAuthOLD).
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
         try {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
-            if (isHovering) {
+            if (iconHovering) {
                 field_148300_d.getTextureManager()
                     .bindTexture(ICON_OUTLINE);
                 Gui.func_146110_a(
@@ -113,12 +137,44 @@ public class MixinServerListEntryNormal {
             GL11.glPopAttrib();
         }
 
-        if (isHovering) {
+        if (selectedAccount != null) {
+            drawStatusSquare(statusX, statusY, selectedStatus);
+            drawSelectedAccountHead(
+                headX,
+                headY,
+                selectedAccount,
+                normalizeTooltipValue(ext.getWawelProviderName()),
+                client);
+            if (shiftDown && headHovering) {
+                Gui.drawRect(headX, headY, headX + ACCOUNT_HEAD_SIZE, headY + ACCOUNT_HEAD_SIZE, 0x55FF0000);
+            }
+        }
+
+        if (headHovering && selectedAccount != null) {
+            List<String> tooltipLines = new ArrayList<>();
+            tooltipLines.add(EnumChatFormatting.WHITE + resolveAccountDisplayName(selectedAccount, accountId));
+            if (shiftDown && selectedAccount.getProfileUuid() != null) {
+                tooltipLines.add(
+                    EnumChatFormatting.GRAY + selectedAccount.getProfileUuid()
+                        .toString());
+            }
+            if (shiftDown) {
+                tooltipLines.add(EnumChatFormatting.RED + GuiText.tr("wawelauth.gui.server_tooltip.unselect_account"));
+            }
+            field_148303_c.func_146793_a(joinTooltipLines(tooltipLines));
+            return;
+        }
+
+        if (statusHovering && selectedAccount != null) {
+            field_148303_c.func_146793_a(StatusColors.getLabel(selectedStatus));
+            return;
+        }
+
+        if (iconHovering) {
             ServerCapabilities caps = ext.getWawelCapabilities();
             ServerCapabilities localAuthCaps = ServerBindingPersistence
                 .getEffectiveLocalAuthCapabilities(field_148301_e);
             boolean localAuthAvailable = isLocalAuthAvailable(localAuthCaps);
-            boolean shiftDown = isShiftDown();
 
             List<String> accountLines = new ArrayList<>();
             List<String> authLines = new ArrayList<>();
@@ -130,28 +186,19 @@ public class MixinServerListEntryNormal {
             String authApiRoot = null;
             java.util.UUID profileUuid = null;
 
-            WawelClient client = WawelClient.instance();
             ClientProvider selectedProvider = null;
             if (accountId >= 0) {
-                if (client != null) {
-                    ClientAccount account = client.getAccountManager()
-                        .getAccount(accountId);
-                    if (account != null) {
-                        String profileName = account.getProfileName();
-                        if (profileName != null && !profileName.trim()
-                            .isEmpty()) {
-                            displayName = profileName;
-                        }
-                        if (account.getProviderName() != null && !account.getProviderName()
-                            .trim()
-                            .isEmpty()) {
-                            rawProviderName = account.getProviderName();
-                            providerName = ProviderDisplayName.displayName(account.getProviderName());
-                            selectedProvider = client.getProviderRegistry()
-                                .getProvider(account.getProviderName());
-                        }
-                        profileUuid = account.getProfileUuid();
+                if (selectedAccount != null) {
+                    displayName = normalizeTooltipValue(selectedAccount.getProfileName());
+                    if (selectedAccount.getProviderName() != null && !selectedAccount.getProviderName()
+                        .trim()
+                        .isEmpty()) {
+                        rawProviderName = selectedAccount.getProviderName();
+                        providerName = ProviderDisplayName.displayName(selectedAccount.getProviderName());
+                        selectedProvider = client.getProviderRegistry()
+                            .getProvider(selectedAccount.getProviderName());
                     }
+                    profileUuid = selectedAccount.getProfileUuid();
                 }
 
                 if (selectedProvider == null && client != null
@@ -261,12 +308,31 @@ public class MixinServerListEntryNormal {
         if (mouseButton != 0) return;
         if (field_148301_e == null) return;
 
+        IServerDataExt ext = (IServerDataExt) field_148301_e;
+        long accountId = ext.getWawelAccountId();
         int indicatorRelX = lastListWidth - ICON_OFFSET_FROM_RIGHT;
+        int statusRelX = indicatorRelX - ACCOUNT_DECORATION_GAP - ACCOUNT_STATUS_SIZE;
+        int headRelX = statusRelX - ACCOUNT_DECORATION_GAP - ACCOUNT_HEAD_SIZE;
+        boolean shiftDown = isShiftDown();
+
+        if (shiftDown && accountId >= 0
+            && relX >= headRelX
+            && relX < headRelX + ACCOUNT_HEAD_SIZE
+            && relY >= ICON_Y_OFFSET + (ICON_HEIGHT - ACCOUNT_HEAD_SIZE) / 2
+            && relY < ICON_Y_OFFSET + (ICON_HEIGHT - ACCOUNT_HEAD_SIZE) / 2 + ACCOUNT_HEAD_SIZE) {
+            ext.setWawelAccountId(-1L);
+            ext.setWawelProviderName(null);
+            ServerBindingPersistence.markServerBindingOrigin(field_148301_e);
+            ServerBindingPersistence.persistServerSelection(field_148301_e);
+            cir.setReturnValue(true);
+            return;
+        }
+
         if (relX >= indicatorRelX && relX < indicatorRelX + ICON_WIDTH
             && relY >= ICON_Y_OFFSET
             && relY < ICON_Y_OFFSET + ICON_HEIGHT) {
 
-            if (isShiftDown()
+            if (shiftDown
                 && isLocalAuthAvailable(ServerBindingPersistence.getEffectiveLocalAuthCapabilities(field_148301_e))) {
                 AccountManagerScreen.openForLocalAuth(field_148301_e);
                 cir.setReturnValue(true);
@@ -305,6 +371,69 @@ public class MixinServerListEntryNormal {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static String resolveAccountDisplayName(ClientAccount account, long accountId) {
+        String displayName = normalizeTooltipValue(account != null ? account.getProfileName() : null);
+        if (displayName != null) {
+            return displayName;
+        }
+        return GuiText.tr("wawelauth.gui.server_tooltip.account_fallback", Long.valueOf(accountId));
+    }
+
+    private static void drawStatusSquare(int x, int y, AccountStatus status) {
+        Gui.drawRect(x, y, x + ACCOUNT_STATUS_SIZE, y + ACCOUNT_STATUS_SIZE, 0xFF000000);
+        Gui.drawRect(
+            x + 1,
+            y + 1,
+            x + ACCOUNT_STATUS_SIZE - 1,
+            y + ACCOUNT_STATUS_SIZE - 1,
+            StatusColors.getColor(status));
+    }
+
+    private static void drawSelectedAccountHead(int x, int y, ClientAccount account, String fallbackProviderName,
+        WawelClient client) {
+        ResourceLocation skin = resolveSelectedAccountSkin(account, fallbackProviderName, client);
+
+        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
+        try {
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+
+            WawelSkinResolver.drawFace(skin, x, y, ACCOUNT_HEAD_SIZE, ACCOUNT_HEAD_SIZE, 1.0F);
+        } finally {
+            GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+            GL11.glPopAttrib();
+        }
+    }
+
+    private static ResourceLocation resolveSelectedAccountSkin(ClientAccount account, String fallbackProviderName,
+        WawelClient client) {
+        if (account == null || client == null) {
+            return WawelSkinResolver.getDefaultSkin();
+        }
+
+        java.util.UUID profileUuid = account.getProfileUuid();
+        String displayName = normalizeTooltipValue(account.getProfileName());
+        if (displayName == null) {
+            displayName = "?";
+        }
+
+        String providerName = normalizeTooltipValue(account.getProviderName());
+        if (providerName == null) {
+            providerName = fallbackProviderName;
+        }
+
+        if (providerName != null) {
+            return client.getSkinResolver()
+                .getSkin(profileUuid, displayName, providerName, SkinRequest.DEFAULT);
+        }
+        return client.getSkinResolver()
+            .getSkin(profileUuid, displayName, SkinRequest.DEFAULT);
+    }
+
     private static boolean notBlank(String value) {
         return value != null && !value.trim()
             .isEmpty();
@@ -319,6 +448,10 @@ public class MixinServerListEntryNormal {
             builder.append(lines.get(i));
         }
         return builder.toString();
+    }
+
+    private static boolean isMouseWithin(int mouseX, int mouseY, int x, int y, int width, int height) {
+        return mouseX >= x && mouseX < x + width && mouseY >= y && mouseY < y + height;
     }
 
     private static List<String> collectAvailableProviderHosts(ServerCapabilities caps) {

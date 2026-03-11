@@ -118,6 +118,7 @@ wawelauth.gui.server_tooltip.local_auth=Local Auth:
 wawelauth.gui.server_tooltip.no_account=Wawel Auth: no account selected
 wawelauth.gui.server_tooltip.provider_tag=Wawel Auth [%s]
 wawelauth.gui.server_tooltip.shift_local_auth=Shift-click to manage Local Auth
+wawelauth.gui.server_tooltip.unselect_account=Unselect Account
 wawelauth.gui.server_tooltip.uuid=UUID: %s
 
 wawelauth.gui.account_manager.accounts=Accounts
