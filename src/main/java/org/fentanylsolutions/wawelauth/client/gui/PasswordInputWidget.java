@@ -2,6 +2,7 @@ package org.fentanylsolutions.wawelauth.client.gui;
 
 import com.cleanroommc.modularui.api.drawable.IDrawable;
 import com.cleanroommc.modularui.drawable.UITexture;
+import com.cleanroommc.modularui.value.StringValue;
 import com.cleanroommc.modularui.widget.ParentWidget;
 import com.cleanroommc.modularui.widgets.ButtonWidget;
 
@@ -66,6 +67,11 @@ public class PasswordInputWidget extends ParentWidget<PasswordInputWidget> {
 
     public PasswordInputWidget setText(String text) {
         this.field.setText(text == null ? "" : text);
+        return this;
+    }
+
+    public PasswordInputWidget value(StringValue value) {
+        this.field.value(value);
         return this;
     }
 

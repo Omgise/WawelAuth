@@ -9,7 +9,6 @@ import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +23,9 @@ import java.util.function.Consumer;
 
 import net.minecraft.util.StatCollector;
 
+import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxySettings;
+import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport;
 import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 
 import com.google.gson.JsonArray;
@@ -81,7 +83,8 @@ public class MicrosoftOAuthClient {
     /**
      * Browser-based Microsoft login that returns Minecraft credentials.
      */
-    public LoginResult loginInteractive(Consumer<String> statusSink) throws IOException {
+    public LoginResult loginInteractive(ProviderProxySettings proxySettings, Consumer<String> statusSink)
+        throws IOException {
         Consumer<String> status = statusSink != null ? statusSink : s -> {};
         String state = UUID.randomUUID()
             .toString()
@@ -91,15 +94,16 @@ public class MicrosoftOAuthClient {
         String authCode = awaitAuthorizationCode(state);
 
         status.accept(tr("wawelauth.gui.login.status.microsoft_exchange_code"));
-        MsToken msToken = exchangeAuthorizationCode(authCode);
+        MsToken msToken = exchangeAuthorizationCode(authCode, proxySettings);
 
-        return loginWithMsToken(msToken, status);
+        return loginWithMsToken(msToken, proxySettings, status);
     }
 
     /**
      * Refresh Microsoft credentials and return fresh Minecraft credentials.
      */
-    public LoginResult refreshFromToken(String refreshToken, Consumer<String> statusSink) throws IOException {
+    public LoginResult refreshFromToken(String refreshToken, ProviderProxySettings proxySettings,
+        Consumer<String> statusSink) throws IOException {
         if (refreshToken == null || refreshToken.trim()
             .isEmpty()) {
             throw new IOException(tr("wawelauth.gui.login.error.microsoft_missing_refresh_token"));
@@ -107,33 +111,35 @@ public class MicrosoftOAuthClient {
 
         Consumer<String> status = statusSink != null ? statusSink : s -> {};
         status.accept(tr("wawelauth.gui.login.status.microsoft_refreshing"));
-        MsToken msToken = refreshMsToken(refreshToken);
-        return loginWithMsToken(msToken, status);
+        MsToken msToken = refreshMsToken(refreshToken, proxySettings);
+        return loginWithMsToken(msToken, proxySettings, status);
     }
 
     /**
      * Validate the current Minecraft token by loading profile data.
      */
-    public MinecraftProfile fetchMinecraftProfile(String minecraftAccessToken) throws IOException {
+    public MinecraftProfile fetchMinecraftProfile(String minecraftAccessToken, ProviderProxySettings proxySettings)
+        throws IOException {
         if (minecraftAccessToken == null || minecraftAccessToken.isEmpty()) {
             throw new IOException(tr("wawelauth.gui.login.error.microsoft_missing_access_token"));
         }
-        JsonObject obj = getJson(MINECRAFT_PROFILE_URL, "Bearer " + minecraftAccessToken);
+        JsonObject obj = getJson(MINECRAFT_PROFILE_URL, "Bearer " + minecraftAccessToken, proxySettings);
         return parseMinecraftProfile(obj);
     }
 
-    private LoginResult loginWithMsToken(MsToken msToken, Consumer<String> status) throws IOException {
+    private LoginResult loginWithMsToken(MsToken msToken, ProviderProxySettings proxySettings, Consumer<String> status)
+        throws IOException {
         status.accept(tr("wawelauth.gui.login.status.microsoft_xbox"));
-        XblToken xbl = getXblToken(msToken.accessToken);
+        XblToken xbl = getXblToken(msToken.accessToken, proxySettings);
 
         status.accept(tr("wawelauth.gui.login.status.microsoft_xsts"));
-        String xsts = getXstsToken(xbl.token);
+        String xsts = getXstsToken(xbl.token, proxySettings);
 
         status.accept(tr("wawelauth.gui.login.status.microsoft_minecraft_token"));
-        String minecraftToken = getMinecraftAccessToken(xbl.uhs, xsts);
+        String minecraftToken = getMinecraftAccessToken(xbl.uhs, xsts, proxySettings);
 
         status.accept(tr("wawelauth.gui.login.status.microsoft_profile"));
-        MinecraftProfile profile = fetchMinecraftProfile(minecraftToken);
+        MinecraftProfile profile = fetchMinecraftProfile(minecraftToken, proxySettings);
 
         return new LoginResult(profile.name, profile.uuid, minecraftToken, msToken.refreshToken);
     }
@@ -239,7 +245,7 @@ public class MicrosoftOAuthClient {
         return code;
     }
 
-    private MsToken exchangeAuthorizationCode(String code) throws IOException {
+    private MsToken exchangeAuthorizationCode(String code, ProviderProxySettings proxySettings) throws IOException {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("client_id", CLIENT_ID);
         params.put("scope", "XboxLive.signin offline_access");
@@ -247,22 +253,22 @@ public class MicrosoftOAuthClient {
         params.put("grant_type", "authorization_code");
         params.put("redirect_uri", REDIRECT_URI);
 
-        JsonObject obj = postForm(MS_TOKEN_URL, params);
+        JsonObject obj = postForm(MS_TOKEN_URL, params, proxySettings);
         return parseMsToken(obj);
     }
 
-    private MsToken refreshMsToken(String refreshToken) throws IOException {
+    private MsToken refreshMsToken(String refreshToken, ProviderProxySettings proxySettings) throws IOException {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("client_id", CLIENT_ID);
         params.put("refresh_token", refreshToken);
         params.put("grant_type", "refresh_token");
         params.put("redirect_uri", REDIRECT_URI);
 
-        JsonObject obj = postForm(MS_TOKEN_URL, params);
+        JsonObject obj = postForm(MS_TOKEN_URL, params, proxySettings);
         return parseMsToken(obj);
     }
 
-    private XblToken getXblToken(String msAccessToken) throws IOException {
+    private XblToken getXblToken(String msAccessToken, ProviderProxySettings proxySettings) throws IOException {
         JsonObject body = new JsonObject();
         JsonObject props = new JsonObject();
         props.addProperty("AuthMethod", "RPS");
@@ -272,7 +278,7 @@ public class MicrosoftOAuthClient {
         body.addProperty("RelyingParty", "http://auth.xboxlive.com");
         body.addProperty("TokenType", "JWT");
 
-        JsonObject response = postJson(XBL_AUTH_URL, body, null);
+        JsonObject response = postJson(XBL_AUTH_URL, body, null, proxySettings);
         String token = requireString(response, "Token");
 
         JsonObject claims = response.getAsJsonObject("DisplayClaims");
@@ -295,7 +301,7 @@ public class MicrosoftOAuthClient {
         return new XblToken(token, uhs);
     }
 
-    private String getXstsToken(String xblToken) throws IOException {
+    private String getXstsToken(String xblToken, ProviderProxySettings proxySettings) throws IOException {
         JsonObject body = new JsonObject();
         JsonObject props = new JsonObject();
         props.addProperty("SandboxId", "RETAIL");
@@ -306,7 +312,7 @@ public class MicrosoftOAuthClient {
         body.addProperty("RelyingParty", "rp://api.minecraftservices.com/");
         body.addProperty("TokenType", "JWT");
 
-        JsonObject response = postJson(XSTS_AUTH_URL, body, null);
+        JsonObject response = postJson(XSTS_AUTH_URL, body, null, proxySettings);
         if (response.has("XErr")) {
             long xerr = response.get("XErr")
                 .getAsLong();
@@ -315,10 +321,11 @@ public class MicrosoftOAuthClient {
         return requireString(response, "Token");
     }
 
-    private String getMinecraftAccessToken(String uhs, String xstsToken) throws IOException {
+    private String getMinecraftAccessToken(String uhs, String xstsToken, ProviderProxySettings proxySettings)
+        throws IOException {
         JsonObject body = new JsonObject();
         body.addProperty("identityToken", "XBL3.0 x=" + uhs + ";" + xstsToken);
-        JsonObject response = postJson(MINECRAFT_AUTH_URL, body, null);
+        JsonObject response = postJson(MINECRAFT_AUTH_URL, body, null, proxySettings);
         return requireString(response, "access_token");
     }
 
@@ -618,65 +625,83 @@ public class MicrosoftOAuthClient {
         }
     }
 
-    private JsonObject postForm(String url, Map<String, String> params) throws IOException {
+    private JsonObject postForm(String url, Map<String, String> params, ProviderProxySettings proxySettings)
+        throws IOException {
         byte[] payload = encodeForm(params).getBytes(StandardCharsets.UTF_8);
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            conn.setRequestProperty("Accept", "application/json");
-            conn.setDoOutput(true);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(payload);
+        debugProxyRequest("POST form", url, proxySettings);
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(proxySettings)) {
+            HttpURLConnection conn = openConnection(url, proxySettings);
+            try {
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setDoOutput(true);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(payload);
+                }
+                return readJsonResponse(conn);
+            } finally {
+                conn.disconnect();
             }
-            return readJsonResponse(conn);
-        } finally {
-            conn.disconnect();
         }
     }
 
-    private JsonObject postJson(String url, JsonObject body, String authorization) throws IOException {
+    private JsonObject postJson(String url, JsonObject body, String authorization, ProviderProxySettings proxySettings)
+        throws IOException {
         byte[] payload = body.toString()
             .getBytes(StandardCharsets.UTF_8);
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-            conn.setRequestProperty("Accept", "application/json");
-            if (authorization != null && !authorization.isEmpty()) {
-                conn.setRequestProperty("Authorization", authorization);
+        debugProxyRequest("POST json", url, proxySettings);
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(proxySettings)) {
+            HttpURLConnection conn = openConnection(url, proxySettings);
+            try {
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                conn.setRequestProperty("Accept", "application/json");
+                if (authorization != null && !authorization.isEmpty()) {
+                    conn.setRequestProperty("Authorization", authorization);
+                }
+                conn.setDoOutput(true);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(payload);
+                }
+                return readJsonResponse(conn);
+            } finally {
+                conn.disconnect();
             }
-            conn.setDoOutput(true);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(payload);
-            }
-            return readJsonResponse(conn);
-        } finally {
-            conn.disconnect();
         }
     }
 
-    private JsonObject getJson(String url, String authorization) throws IOException {
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Accept", "application/json");
-            if (authorization != null && !authorization.isEmpty()) {
-                conn.setRequestProperty("Authorization", authorization);
+    private JsonObject getJson(String url, String authorization, ProviderProxySettings proxySettings)
+        throws IOException {
+        debugProxyRequest("GET", url, proxySettings);
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(proxySettings)) {
+            HttpURLConnection conn = openConnection(url, proxySettings);
+            try {
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "application/json");
+                if (authorization != null && !authorization.isEmpty()) {
+                    conn.setRequestProperty("Authorization", authorization);
+                }
+                return readJsonResponse(conn);
+            } finally {
+                conn.disconnect();
             }
-            return readJsonResponse(conn);
-        } finally {
-            conn.disconnect();
         }
     }
 
-    private HttpURLConnection openConnection(String url) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        conn.setReadTimeout(READ_TIMEOUT_MS);
-        conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "WawelAuth");
-        return conn;
+    private HttpURLConnection openConnection(String url, ProviderProxySettings proxySettings) throws IOException {
+        return ProviderProxySupport
+            .openConnection(url, proxySettings, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, "WawelAuth");
+    }
+
+    private static void debugProxyRequest(String method, String url, ProviderProxySettings proxySettings) {
+        WawelAuth.debug(
+            "Microsoft OAuth HTTP " + method
+                + " "
+                + url
+                + " [proxy="
+                + ProviderProxySupport.describeProxySettings(proxySettings)
+                + ", transport=urlconnection]");
     }
 
     private JsonObject readJsonResponse(HttpURLConnection conn) throws IOException {

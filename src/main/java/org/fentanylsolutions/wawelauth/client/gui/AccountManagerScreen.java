@@ -24,13 +24,18 @@ import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.wawelclient.BuiltinProviders;
+import org.fentanylsolutions.wawelauth.wawelclient.ProviderRegistry;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.data.AccountStatus;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientAccount;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxySettings;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxyType;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderType;
+import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport;
 import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 import org.fentanylsolutions.wawelauth.wawelcore.util.NetworkAddressUtil;
@@ -46,6 +51,7 @@ import com.cleanroommc.modularui.factory.ClientGUI;
 import com.cleanroommc.modularui.screen.ModularPanel;
 import com.cleanroommc.modularui.screen.viewport.ModularGuiContext;
 import com.cleanroommc.modularui.utils.Alignment;
+import com.cleanroommc.modularui.value.StringValue;
 import com.cleanroommc.modularui.widget.Widget;
 import com.cleanroommc.modularui.widgets.ButtonWidget;
 import com.cleanroommc.modularui.widgets.Dialog;
@@ -93,6 +99,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     private RegisterDialog registerDialog;
     private IPanelHandler removeAccountDialogHandler;
     private IPanelHandler providerSettingsDialogHandler;
+    private IPanelHandler providerProxyDialogHandler;
     private IPanelHandler credentialDialogHandler;
     private IPanelHandler credentialDeleteDialogHandler;
     private IPanelHandler texturePathDialogHandler;
@@ -100,6 +107,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     private long pendingRemoveAccountId = -1L;
     private String pendingRemoveAccountName;
     private String pendingProviderSettingsName;
+    private String pendingProviderProxyName;
     private long pendingCredentialDeleteAccountId = -1L;
     private String pendingCredentialDeleteAccountName;
     private String pendingCredentialDeletePassword;
@@ -189,6 +197,8 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             .simple(mainPanel, (parent, player) -> buildRemoveAccountDialog(), true);
         providerSettingsDialogHandler = IPanelHandler
             .simple(mainPanel, (parent, player) -> buildProviderSettingsDialog(), true);
+        providerProxyDialogHandler = IPanelHandler
+            .simple(mainPanel, (parent, player) -> buildProviderProxyDialog(), true);
         credentialDialogHandler = IPanelHandler.simple(mainPanel, (parent, player) -> buildCredentialDialog(), true);
         credentialDeleteDialogHandler = IPanelHandler
             .simple(mainPanel, (parent, player) -> buildCredentialDeleteDialog(), true);
@@ -1089,6 +1099,13 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         this.providerSettingsDialogHandler.openPanel();
     }
 
+    private void openProviderProxyDialog(ClientProvider provider) {
+        if (provider == null) return;
+        this.pendingProviderProxyName = provider.getName();
+        this.providerProxyDialogHandler.deleteCachedPanel();
+        this.providerProxyDialogHandler.openPanel();
+    }
+
     private Dialog<Boolean> buildProviderSettingsDialog() {
         Dialog<Boolean> dialog = new Dialog<>("wawelauth_provider_settings");
         dialog.setCloseOnOutOfBoundsClick(false);
@@ -1233,6 +1250,20 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         GuiText.fitButtonLabel(deleteProviderBtn, 98, "wawelauth.gui.account_manager.delete_provider");
         deleteProviderBtn.setEnabled(!builtIn);
 
+        boolean offlineBuiltin = BuiltinProviders.isOfflineProvider(oldName);
+        ButtonWidget<?> proxySettingsBtn = new ButtonWidget<>();
+        proxySettingsBtn.size(88, 18)
+            .onMousePressed(btn -> {
+                if (offlineBuiltin) {
+                    statusText[0] = GuiText.tr("wawelauth.gui.account_manager.proxy_not_supported_offline");
+                    return true;
+                }
+                openProviderProxyDialog(provider);
+                return true;
+            });
+        GuiText.fitButtonLabel(proxySettingsBtn, 88, "wawelauth.gui.account_manager.proxy_settings");
+        proxySettingsBtn.setEnabled(!offlineBuiltin);
+
         ButtonWidget<?> closeBtn = new ButtonWidget<>();
         closeBtn.size(70, 18)
             .onMousePressed(btn -> {
@@ -1242,7 +1273,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             });
         GuiText.fitButtonLabel(closeBtn, 70, "wawelauth.gui.common.close");
 
-        dialog.size(270, 130)
+        dialog.size(286, 154)
             .child(
                 new Column().widthRel(1.0f)
                     .heightRel(1.0f)
@@ -1271,14 +1302,470 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                             .mainAxisAlignment(Alignment.MainAxis.CENTER)
                             .child(saveNameBtn)
                             .child(new Widget<>().size(6, 18))
-                            .child(deleteProviderBtn))
+                            .child(proxySettingsBtn))
                     .child(
                         new Row().widthRel(1.0f)
                             .height(20)
                             .mainAxisAlignment(Alignment.MainAxis.CENTER)
+                            .child(deleteProviderBtn)
+                            .child(new Widget<>().size(6, 18))
                             .child(closeBtn)));
 
         return dialog;
+    }
+
+    private Dialog<Boolean> buildProviderProxyDialog() {
+        Dialog<Boolean> dialog = new Dialog<>("wawelauth_provider_proxy");
+        dialog.setCloseOnOutOfBoundsClick(false);
+
+        WawelClient client = WawelClient.instance();
+        if (client == null || pendingProviderProxyName == null) {
+            dialog.size(230, 90)
+                .child(
+                    new Column().widthRel(1.0f)
+                        .heightRel(1.0f)
+                        .padding(8)
+                        .child(
+                            new TextWidget<>(GuiText.key("wawelauth.gui.account_manager.provider_not_available"))
+                                .widthRel(1.0f)
+                                .height(14))
+                        .child(
+                            new Row().widthRel(1.0f)
+                                .height(20)
+                                .margin(0, 6)
+                                .mainAxisAlignment(Alignment.MainAxis.CENTER)
+                                .child(
+                                    GuiText
+                                        .fitButtonLabel(
+                                            new ButtonWidget<>().size(70, 18),
+                                            70,
+                                            "wawelauth.gui.common.close")
+                                        .onMousePressed(btn -> {
+                                            dialog.closeIfOpen();
+                                            return true;
+                                        }))));
+            return dialog;
+        }
+
+        ClientProvider provider = client.getProviderRegistry()
+            .getProvider(pendingProviderProxyName);
+        if (provider == null) {
+            dialog.size(230, 90)
+                .child(
+                    new Column().widthRel(1.0f)
+                        .heightRel(1.0f)
+                        .padding(8)
+                        .child(
+                            new TextWidget<>(GuiText.key("wawelauth.gui.account_manager.provider_gone")).widthRel(1.0f)
+                                .height(14))
+                        .child(
+                            new Row().widthRel(1.0f)
+                                .height(20)
+                                .margin(0, 6)
+                                .mainAxisAlignment(Alignment.MainAxis.CENTER)
+                                .child(
+                                    GuiText
+                                        .fitButtonLabel(
+                                            new ButtonWidget<>().size(70, 18),
+                                            70,
+                                            "wawelauth.gui.common.close")
+                                        .onMousePressed(btn -> {
+                                            dialog.closeIfOpen();
+                                            return true;
+                                        }))));
+            return dialog;
+        }
+
+        ProviderProxySettings initialSettings = provider.getProxySettings();
+        final boolean[] proxyEnabled = { initialSettings.isEnabled() };
+        final ProviderProxyType[] proxyType = { initialSettings.getType() };
+        final String[] proxyStatusText = { GuiText.tr("wawelauth.gui.account_manager.proxy_status_not_tested") };
+        final ProviderRegistry.ProbeOutcome[] proxyStatusOutcome = { ProviderRegistry.ProbeOutcome.NEUTRAL };
+        final String[] providerStatusText = { BuiltinProviders.isOfflineProvider(provider.getName())
+            ? GuiText.tr("wawelauth.gui.account_manager.proxy_not_supported_offline")
+            : GuiText.tr("wawelauth.gui.account_manager.proxy_status_not_tested") };
+        final ProviderRegistry.ProbeOutcome[] providerStatusOutcome = { ProviderRegistry.ProbeOutcome.NEUTRAL };
+        final boolean[] busy = { false };
+
+        TextFieldWidget hostField = new TextFieldWidget()
+            .hintText(GuiText.tr("wawelauth.gui.account_manager.proxy_address"));
+        hostField.width(214)
+            .height(18)
+            .setMaxLength(255)
+            .margin(0, 2);
+        hostField.value(new StringValue(initialSettings.getHost() != null ? initialSettings.getHost() : ""));
+
+        TextFieldWidget portField = new TextFieldWidget()
+            .hintText(GuiText.tr("wawelauth.gui.account_manager.proxy_port"));
+        portField.width(64)
+            .height(18)
+            .setMaxLength(5)
+            .margin(0, 2);
+        portField
+            .value(new StringValue(initialSettings.getPort() != null ? String.valueOf(initialSettings.getPort()) : ""));
+
+        TextFieldWidget usernameField = new TextFieldWidget()
+            .hintText(GuiText.tr("wawelauth.gui.account_manager.proxy_username"));
+        usernameField.widthRel(1.0f)
+            .height(18)
+            .setMaxLength(128)
+            .margin(0, 2);
+        usernameField
+            .value(new StringValue(initialSettings.getUsername() != null ? initialSettings.getUsername() : ""));
+
+        PasswordInputWidget passwordField = new PasswordInputWidget()
+            .hintText(GuiText.tr("wawelauth.gui.account_manager.proxy_password"));
+        passwordField.widthRel(1.0f)
+            .height(18)
+            .setMaxLength(128)
+            .margin(0, 2);
+        passwordField
+            .value(new StringValue(initialSettings.getPassword() != null ? initialSettings.getPassword() : ""));
+
+        ButtonWidget<?> enabledBtn = new ButtonWidget<>();
+        enabledBtn.size(94, 18)
+            .onMousePressed(btn -> {
+                proxyEnabled[0] = !proxyEnabled[0];
+                return true;
+            });
+        enabledBtn.overlay(
+            IKey.dynamic(
+                () -> GuiText.ellipsizeToPixelWidth(
+                    proxyEnabled[0] ? GuiText.tr("wawelauth.gui.account_manager.proxy_enabled")
+                        : GuiText.tr("wawelauth.gui.account_manager.proxy_disabled"),
+                    86)));
+
+        ButtonWidget<?> typeBtn = new ButtonWidget<>();
+        typeBtn.size(94, 18)
+            .onMousePressed(btn -> {
+                proxyType[0] = proxyType[0] == ProviderProxyType.HTTP ? ProviderProxyType.SOCKS
+                    : ProviderProxyType.HTTP;
+                return true;
+            });
+        typeBtn.overlay(
+            IKey.dynamic(
+                () -> GuiText.ellipsizeToPixelWidth(
+                    proxyType[0] == ProviderProxyType.HTTP ? GuiText.tr("wawelauth.gui.account_manager.proxy_type_http")
+                        : GuiText.tr("wawelauth.gui.account_manager.proxy_type_socks"),
+                    86)));
+
+        ButtonWidget<?> testBtn = new ButtonWidget<>();
+        testBtn.size(70, 18)
+            .onMousePressed(btn -> {
+                if (busy[0]) return true;
+                try {
+                    ProviderProxySettings formSettings = readProxySettingsFromForm(
+                        proxyEnabled[0],
+                        true,
+                        proxyType[0],
+                        hostField,
+                        portField,
+                        usernameField,
+                        passwordField);
+                    busy[0] = true;
+                    proxyStatusOutcome[0] = ProviderRegistry.ProbeOutcome.NEUTRAL;
+                    providerStatusOutcome[0] = ProviderRegistry.ProbeOutcome.NEUTRAL;
+                    proxyStatusText[0] = GuiText.tr("wawelauth.gui.account_manager.proxy_testing_proxy");
+                    providerStatusText[0] = GuiText.tr("wawelauth.gui.account_manager.proxy_testing_provider");
+
+                    CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return client.getProviderRegistry()
+                                .probeProviderConnection(provider.getName(), formSettings);
+                        } catch (Exception e) {
+                            throw new RuntimeException(e);
+                        }
+                    })
+                        .whenComplete(
+                            (probeResult, err) -> Minecraft.getMinecraft()
+                                .func_152344_a(() -> {
+                                    busy[0] = false;
+                                    if (err != null) {
+                                        proxyStatusOutcome[0] = ProviderRegistry.ProbeOutcome.NEUTRAL;
+                                        proxyStatusText[0] = GuiText
+                                            .tr("wawelauth.gui.account_manager.proxy_status_not_tested");
+                                        providerStatusOutcome[0] = ProviderRegistry.ProbeOutcome.ERROR;
+                                        providerStatusText[0] = formatThrowableMessage(err);
+                                        return;
+                                    }
+                                    proxyStatusOutcome[0] = probeResult.getProxyStatus()
+                                        .getOutcome();
+                                    proxyStatusText[0] = probeResult.getProxyStatus()
+                                        .getMessage();
+                                    providerStatusOutcome[0] = probeResult.getProviderApiStatus()
+                                        .getOutcome();
+                                    providerStatusText[0] = probeResult.getProviderApiStatus()
+                                        .getMessage();
+                                }));
+                } catch (Exception e) {
+                    proxyStatusOutcome[0] = ProviderRegistry.ProbeOutcome.ERROR;
+                    proxyStatusText[0] = formatThrowableMessage(e);
+                    providerStatusOutcome[0] = ProviderRegistry.ProbeOutcome.NEUTRAL;
+                    providerStatusText[0] = GuiText.tr("wawelauth.gui.account_manager.proxy_status_not_tested");
+                }
+                return true;
+            });
+        testBtn.overlay(
+            IKey.dynamic(
+                () -> GuiText.ellipsizeToPixelWidth(
+                    busy[0] ? GuiText.tr("wawelauth.gui.common.working")
+                        : GuiText.tr("wawelauth.gui.account_manager.proxy_test"),
+                    62)));
+
+        ButtonWidget<?> saveBtn = new ButtonWidget<>();
+        saveBtn.size(70, 18)
+            .onMousePressed(btn -> {
+                if (busy[0]) return true;
+                try {
+                    ProviderProxySettings formSettings = readProxySettingsFromForm(
+                        proxyEnabled[0],
+                        false,
+                        proxyType[0],
+                        hostField,
+                        portField,
+                        usernameField,
+                        passwordField);
+                    client.getProviderRegistry()
+                        .updateProxySettings(provider.getName(), formSettings);
+                    if (selectedProvider != null && provider.getName()
+                        .equals(selectedProvider.getName())) {
+                        selectedProvider = client.getProviderRegistry()
+                            .getProvider(provider.getName());
+                    }
+                    providerSettingsDialogHandler.deleteCachedPanel();
+                    pendingProviderProxyName = null;
+                    dialog.closeIfOpen();
+                } catch (Exception e) {
+                    proxyStatusOutcome[0] = ProviderRegistry.ProbeOutcome.ERROR;
+                    proxyStatusText[0] = formatThrowableMessage(e);
+                }
+                return true;
+            });
+        GuiText.fitButtonLabel(saveBtn, 70, "wawelauth.gui.account_manager.proxy_save");
+
+        ButtonWidget<?> closeBtn = new ButtonWidget<>();
+        closeBtn.size(70, 18)
+            .onMousePressed(btn -> {
+                pendingProviderProxyName = null;
+                dialog.closeIfOpen();
+                return true;
+            });
+        GuiText.fitButtonLabel(closeBtn, 70, "wawelauth.gui.common.close");
+
+        dialog.size(300, 224)
+            .child(
+                new Column().widthRel(1.0f)
+                    .heightRel(1.0f)
+                    .padding(8)
+                    .child(
+                        new TextWidget<>(GuiText.key("wawelauth.gui.account_manager.proxy_settings")).widthRel(1.0f)
+                            .height(14))
+                    .child(
+                        new TextWidget<>(
+                            GuiText.key(
+                                "wawelauth.gui.account_manager.provider_line",
+                                ProviderDisplayName.displayName(provider.getName()))).color(0xFFAAAAAA)
+                                    .scale(0.8f)
+                                    .widthRel(1.0f)
+                                    .height(10))
+                    .child(
+                        new Row().widthRel(1.0f)
+                            .height(20)
+                            .margin(0, 4)
+                            .mainAxisAlignment(Alignment.MainAxis.CENTER)
+                            .child(enabledBtn)
+                            .child(new Widget<>().size(6, 18))
+                            .child(typeBtn))
+                    .child(
+                        new Row().widthRel(1.0f)
+                            .height(20)
+                            .margin(0, 2)
+                            .child(hostField)
+                            .child(new Widget<>().size(6, 18))
+                            .child(portField))
+                    .child(usernameField)
+                    .child(passwordField)
+                    .child(
+                        new TextWidget<>(
+                            IKey.dynamic(
+                                () -> unsupportedHttpProxyAuthNote(proxyType[0], usernameField, passwordField)))
+                                    .color(0xFFFF5555)
+                                    .widthRel(1.0f)
+                                    .height(10)
+                                    .margin(0, 2))
+                    .child(
+                        new TextWidget<>(
+                            IKey.dynamic(
+                                () -> GuiText
+                                    .tr("wawelauth.gui.account_manager.proxy_status_proxy", proxyStatusText[0])))
+                                        .color(() -> probeOutcomeColor(proxyStatusOutcome[0]))
+                                        .widthRel(1.0f)
+                                        .height(12)
+                                        .margin(0, 4))
+                    .child(
+                        new TextWidget<>(
+                            IKey.dynamic(
+                                () -> GuiText.tr(
+                                    "wawelauth.gui.account_manager.proxy_status_provider_api",
+                                    providerStatusText[0]))).color(() -> probeOutcomeColor(providerStatusOutcome[0]))
+                                        .widthRel(1.0f)
+                                        .height(12)
+                                        .margin(0, 1))
+                    .child(
+                        new Row().widthRel(1.0f)
+                            .height(20)
+                            .margin(0, 7)
+                            .mainAxisAlignment(Alignment.MainAxis.CENTER)
+                            .child(testBtn)
+                            .child(new Widget<>().size(6, 18))
+                            .child(saveBtn)
+                            .child(new Widget<>().size(6, 18))
+                            .child(closeBtn)));
+
+        return dialog;
+    }
+
+    private ProviderProxySettings readProxySettingsFromForm(boolean proxyEnabled, boolean ignoreEnabledToggle,
+        ProviderProxyType proxyType, TextFieldWidget hostField, TextFieldWidget portField,
+        TextFieldWidget usernameField, PasswordInputWidget passwordField) {
+        ProviderProxySettings settings = new ProviderProxySettings();
+        settings.setType(proxyType);
+
+        ParsedProxyEndpoint endpoint = parseProxyEndpoint(
+            trimToNull(hostField.getText()),
+            trimToNull(portField.getText()));
+        settings.setHost(endpoint.host);
+        if (endpoint.port != null) {
+            settings.setPort(endpoint.port);
+        }
+
+        String username = trimToNull(usernameField.getText());
+        String password = trimToNull(passwordField.getText());
+        settings.setUsername(username);
+        settings.setPassword(password);
+        settings.setEnabled(
+            ignoreEnabledToggle ? endpoint.host != null || endpoint.port != null || username != null || password != null
+                : proxyEnabled);
+        return settings;
+    }
+
+    private ParsedProxyEndpoint parseProxyEndpoint(String rawHost, String rawPort) {
+        String host = rawHost;
+        Integer explicitPort = parseProxyPort(rawPort);
+
+        ParsedProxyEndpoint embedded = parseEmbeddedProxyEndpoint(host);
+        host = embedded.host;
+
+        ParsedProxyEndpoint resolved = new ParsedProxyEndpoint();
+        resolved.host = host;
+        resolved.port = explicitPort != null ? explicitPort : embedded.port;
+        return resolved;
+    }
+
+    private ParsedProxyEndpoint parseEmbeddedProxyEndpoint(String rawHost) {
+        ParsedProxyEndpoint result = new ParsedProxyEndpoint();
+        result.host = rawHost;
+        result.port = null;
+
+        if (rawHost == null) {
+            return result;
+        }
+
+        if (rawHost.startsWith("[")) {
+            int endBracket = rawHost.indexOf(']');
+            if (endBracket > 0) {
+                String hostPart = rawHost.substring(1, endBracket);
+                if (endBracket + 1 < rawHost.length() && rawHost.charAt(endBracket + 1) == ':') {
+                    result.host = hostPart;
+                    result.port = parseProxyPort(rawHost.substring(endBracket + 2));
+                    return result;
+                }
+                if (endBracket == rawHost.length() - 1) {
+                    result.host = hostPart;
+                }
+            }
+            return result;
+        }
+
+        int firstColon = rawHost.indexOf(':');
+        int lastColon = rawHost.lastIndexOf(':');
+        if (firstColon > 0 && firstColon == lastColon) {
+            String hostPart = trimToNull(rawHost.substring(0, lastColon));
+            String portPart = trimToNull(rawHost.substring(lastColon + 1));
+            if (hostPart != null && portPart != null) {
+                result.host = hostPart;
+                result.port = parseProxyPort(portPart);
+            }
+        }
+        return result;
+    }
+
+    private Integer parseProxyPort(String portText) {
+        if (portText == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(portText);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(GuiText.tr("wawelauth.gui.account_manager.proxy_port_invalid"));
+        }
+    }
+
+    private String formatThrowableMessage(Throwable throwable) {
+        String fallback = null;
+        Throwable current = throwable;
+        while (current != null) {
+            String message = trimToNull(current.getMessage());
+            boolean wrapper = current instanceof java.util.concurrent.CompletionException
+                || current instanceof java.util.concurrent.ExecutionException
+                || current.getClass() == RuntimeException.class;
+            if (message != null) {
+                if (!wrapper) {
+                    return message;
+                }
+                if (fallback == null) {
+                    fallback = message;
+                }
+            }
+            if (current.getCause() == null || current.getCause() == current) {
+                break;
+            }
+            current = current.getCause();
+        }
+        return fallback != null ? fallback : (throwable != null ? throwable.toString() : "");
+    }
+
+    private static int probeOutcomeColor(ProviderRegistry.ProbeOutcome outcome) {
+        if (outcome == ProviderRegistry.ProbeOutcome.SUCCESS) {
+            return 0xFF55FF55;
+        }
+        if (outcome == ProviderRegistry.ProbeOutcome.ERROR) {
+            return 0xFFFF5555;
+        }
+        return DETAIL_SECONDARY_TEXT_COLOR;
+    }
+
+    private static String unsupportedHttpProxyAuthNote(ProviderProxyType proxyType, TextFieldWidget usernameField,
+        PasswordInputWidget passwordField) {
+        if (proxyType != ProviderProxyType.HTTP || ProviderProxySupport.isModernHttpProxyAuthAvailable()) {
+            return "";
+        }
+        if (trimToNull(usernameField.getText()) == null && trimToNull(passwordField.getText()) == null) {
+            return "";
+        }
+        return GuiText.tr("wawelauth.gui.account_manager.proxy_java8_basic_auth_unsupported");
+    }
+
+    private static final class ParsedProxyEndpoint {
+
+        private String host;
+        private Integer port;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void confirmAndRemoveSelectedAccount() {
@@ -1501,13 +1988,16 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
 
         UUID uuid = account.getProfileUuid();
         String name = account.getProfileName() != null ? account.getProfileName() : "?";
+        ClientProvider provider = resolveProvider(
+            client.getProviderRegistry()
+                .getProvider(account.getProviderName()));
         WawelAuth.debug("Preview fetch profile via fillProfileFromProvider: " + UuidUtil.toUnsigned(uuid));
 
         CompletableFuture.supplyAsync(() -> {
             try {
                 GameProfile probe = new GameProfile(uuid, name);
                 GameProfile filled = client.getSessionBridge()
-                    .fillProfileFromProvider(probe, true);
+                    .fillProfileFromProvider(provider, probe, true);
                 if (filled == null || filled.getProperties()
                     .isEmpty()) {
                     return null;
@@ -1533,7 +2023,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                         if (previewFrontEntity == null || previewBackEntity == null
                             || previewFrontEntity.isRequestStale(frontRequestId)
                             || previewBackEntity.isRequestStale(backRequestId)) return;
-                        applyTexturesFromProfile(response, uuid, frontRequestId, backRequestId);
+                        applyTexturesFromProfile(response, uuid, frontRequestId, backRequestId, provider);
                     });
             });
     }
@@ -1562,7 +2052,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     }
 
     private void applyTexturesFromProfile(JsonObject profileResponse, UUID uuid, long frontRequestId,
-        long backRequestId) {
+        long backRequestId, ClientProvider provider) {
         if (profileResponse == null || !profileResponse.has("properties")) return;
 
         try {
@@ -1611,12 +2101,12 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     WawelAuth.debug("Preview skin URL: " + skinUrl);
                     previewFrontEntity.setForcedSkinModel(model);
                     previewBackEntity.setForcedSkinModel(model);
-                    previewFrontEntity.setSkinFromUrl(skinUrl, uuid, frontRequestId);
+                    previewFrontEntity.setSkinFromUrl(skinUrl, uuid, frontRequestId, provider);
                     ResourceLocation sharedSkin = previewFrontEntity.getCustomSkinLocation();
                     if (sharedSkin != null) {
                         previewBackEntity.setSkinFromExisting(sharedSkin, backRequestId);
                     } else {
-                        previewBackEntity.setSkinFromUrl(skinUrl, uuid, backRequestId);
+                        previewBackEntity.setSkinFromUrl(skinUrl, uuid, backRequestId, provider);
                     }
                     foundSkin = true;
                 }
@@ -1636,7 +2126,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     }
                     WawelAuth.debug("Preview cape URL: " + capeUrl + (animated ? " (animated)" : ""));
                     if (animated) {
-                        previewFrontEntity.setCapeAnimated(capeUrl, uuid, frontRequestId, () -> {
+                        previewFrontEntity.setCapeAnimated(capeUrl, uuid, frontRequestId, provider, () -> {
                             if (previewFrontEntity == null || previewBackEntity == null
                                 || previewFrontEntity.isRequestStale(frontRequestId)
                                 || previewBackEntity.isRequestStale(backRequestId)) {
@@ -1648,12 +2138,12 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                             }
                         });
                     } else {
-                        previewFrontEntity.setCapeFromUrl(capeUrl, uuid, frontRequestId);
+                        previewFrontEntity.setCapeFromUrl(capeUrl, uuid, frontRequestId, provider);
                         ResourceLocation sharedCape = previewFrontEntity.getCustomCapeLocation();
                         if (sharedCape != null) {
                             previewBackEntity.setCapeFromExisting(sharedCape, backRequestId);
                         } else {
-                            previewBackEntity.setCapeFromUrl(capeUrl, uuid, backRequestId);
+                            previewBackEntity.setCapeFromUrl(capeUrl, uuid, backRequestId, provider);
                         }
                     }
                 }

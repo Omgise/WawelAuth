@@ -63,6 +63,24 @@ public class ClientProvider {
     /** True if this provider was explicitly added by the user. */
     private boolean manualEntry = true;
 
+    /** Per-provider proxy toggle. */
+    private boolean proxyEnabled;
+
+    /** Proxy type when proxyEnabled is true. */
+    private ProviderProxyType proxyType = ProviderProxyType.HTTP;
+
+    /** Proxy host/address. */
+    private String proxyHost;
+
+    /** Proxy port. */
+    private Integer proxyPort;
+
+    /** Optional proxy username. */
+    private String proxyUsername;
+
+    /** Optional proxy password. */
+    private String proxyPassword;
+
     public ClientProvider() {}
 
     // --- URL builders ---
@@ -213,5 +231,82 @@ public class ClientProvider {
 
     public void setManualEntry(boolean manualEntry) {
         this.manualEntry = manualEntry;
+    }
+
+    public boolean isProxyEnabled() {
+        return proxyEnabled;
+    }
+
+    public void setProxyEnabled(boolean proxyEnabled) {
+        this.proxyEnabled = proxyEnabled;
+    }
+
+    public ProviderProxyType getProxyType() {
+        return proxyType != null ? proxyType : ProviderProxyType.HTTP;
+    }
+
+    public void setProxyType(ProviderProxyType proxyType) {
+        this.proxyType = proxyType != null ? proxyType : ProviderProxyType.HTTP;
+    }
+
+    public String getProxyHost() {
+        return proxyHost;
+    }
+
+    public void setProxyHost(String proxyHost) {
+        this.proxyHost = proxyHost;
+    }
+
+    public Integer getProxyPort() {
+        return proxyPort;
+    }
+
+    public void setProxyPort(Integer proxyPort) {
+        this.proxyPort = proxyPort;
+    }
+
+    public String getProxyUsername() {
+        return proxyUsername;
+    }
+
+    public void setProxyUsername(String proxyUsername) {
+        this.proxyUsername = proxyUsername;
+    }
+
+    public String getProxyPassword() {
+        return proxyPassword;
+    }
+
+    public void setProxyPassword(String proxyPassword) {
+        this.proxyPassword = proxyPassword;
+    }
+
+    public ProviderProxySettings getProxySettings() {
+        ProviderProxySettings settings = new ProviderProxySettings();
+        settings.setEnabled(proxyEnabled);
+        settings.setType(getProxyType());
+        settings.setHost(proxyHost);
+        settings.setPort(proxyPort);
+        settings.setUsername(proxyUsername);
+        settings.setPassword(proxyPassword);
+        return settings;
+    }
+
+    public void setProxySettings(ProviderProxySettings settings) {
+        if (settings == null) {
+            proxyEnabled = false;
+            proxyType = ProviderProxyType.HTTP;
+            proxyHost = null;
+            proxyPort = null;
+            proxyUsername = null;
+            proxyPassword = null;
+            return;
+        }
+        proxyEnabled = settings.isEnabled();
+        proxyType = settings.getType();
+        proxyHost = settings.getHost();
+        proxyPort = settings.getPort();
+        proxyUsername = settings.getUsername();
+        proxyPassword = settings.getPassword();
     }
 }

@@ -267,7 +267,7 @@ public class AccountManager {
                         JsonObject body = new JsonObject();
                         body.addProperty("accessToken", token);
                         body.addProperty("clientToken", account.getClientToken());
-                        httpClient.postJson(provider.authUrl("/invalidate"), body);
+                        httpClient.postJson(provider, provider.authUrl("/invalidate"), body);
                     }
                 } catch (Exception e) {
                     WawelAuth.debug("Failed to invalidate token on server (non-fatal): " + e.getMessage());
@@ -466,7 +466,7 @@ public class AccountManager {
         body.addProperty("clientToken", clientToken);
         body.addProperty("requestUser", true);
 
-        JsonObject response = httpClient.postJson(provider.authUrl("/authenticate"), body);
+        JsonObject response = httpClient.postJson(provider, provider.authUrl("/authenticate"), body);
 
         // Parse response
         String accessToken = response.get("accessToken")
@@ -531,7 +531,7 @@ public class AccountManager {
             selectedProfileObj.addProperty("name", profileName);
             refreshBody.add("selectedProfile", selectedProfileObj);
 
-            JsonObject refreshResp = httpClient.postJson(provider.authUrl("/refresh"), refreshBody);
+            JsonObject refreshResp = httpClient.postJson(provider, provider.authUrl("/refresh"), refreshBody);
 
             // Update tokens from refresh response
             accessToken = refreshResp.get("accessToken")
@@ -672,7 +672,7 @@ public class AccountManager {
 
         String baseUrl = resolveServicesBase(provider);
         String registerUrl = baseUrl + "/api/wawelauth/register";
-        httpClient.postJson(registerUrl, body);
+        httpClient.postJson(provider, registerUrl, body);
         WawelAuth.LOG.info("Registered account '{}' on provider '{}'", cleanUsername, providerName);
     }
 
@@ -718,7 +718,7 @@ public class AccountManager {
         body.addProperty("newPassword", next);
 
         String baseUrl = resolveServicesBase(provider);
-        httpClient.postJson(baseUrl + "/api/wawelauth/change-password", body);
+        httpClient.postJson(provider, baseUrl + "/api/wawelauth/change-password", body);
         WawelAuth.LOG.info(
             "Changed password for account '{}' on provider '{}'",
             account.getProfileName(),
@@ -759,7 +759,7 @@ public class AccountManager {
         body.addProperty("currentPassword", current);
 
         String baseUrl = resolveServicesBase(provider);
-        httpClient.postJson(baseUrl + "/api/wawelauth/delete-account", body);
+        httpClient.postJson(provider, baseUrl + "/api/wawelauth/delete-account", body);
 
         String targetProvider = account.getProviderName();
         String targetUserUuid = trimToNull(account.getUserUuid());
@@ -795,7 +795,7 @@ public class AccountManager {
         }
 
         String baseUrl = resolveServicesBase(provider);
-        JsonObject metadata = httpClient.getJson(baseUrl);
+        JsonObject metadata = httpClient.getJson(provider, baseUrl);
         if (metadata == null || !metadata.has("meta")
             || metadata.get("meta")
                 .isJsonNull()
@@ -829,7 +829,8 @@ public class AccountManager {
         }
 
         Consumer<String> status = statusSink != null ? statusSink : s -> {};
-        MicrosoftOAuthClient.LoginResult result = microsoftOAuthClient.loginInteractive(status);
+        MicrosoftOAuthClient.LoginResult result = microsoftOAuthClient
+            .loginInteractive(provider.getProxySettings(), status);
 
         long now = System.currentTimeMillis();
         ClientAccount account = new ClientAccount();
@@ -883,11 +884,21 @@ public class AccountManager {
         }
 
         if (isMicrosoftManagedMojangAccount(provider, account)) {
-            return doValidateOrRefreshMicrosoft(account);
+            return doValidateOrRefreshMicrosoft(account, provider);
         }
 
         long now = System.currentTimeMillis();
         account.setLastRefreshAttemptAt(now);
+
+        WawelAuth.debug(
+            "Validating account " + account.getId()
+                + " ("
+                + account.getProfileName()
+                + ") on provider '"
+                + provider.getName()
+                + "' using proxy "
+                + org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport
+                    .describeProxySettings(provider.getProxySettings()));
 
         // Step 1: Validate
         try {
@@ -898,7 +909,7 @@ public class AccountManager {
                 validateBody.addProperty("clientToken", account.getClientToken());
             }
 
-            httpClient.postJson(provider.authUrl("/validate"), validateBody);
+            httpClient.postJson(provider, provider.authUrl("/validate"), validateBody);
 
             // 204: token is valid
             account.setStatus(AccountStatus.VALID);
@@ -944,7 +955,7 @@ public class AccountManager {
                 refreshBody.add("selectedProfile", selectedProfileObj);
             }
 
-            JsonObject response = httpClient.postJson(provider.authUrl("/refresh"), refreshBody);
+            JsonObject response = httpClient.postJson(provider, provider.authUrl("/refresh"), refreshBody);
 
             // 200: token refreshed
             String newAccessToken = response.get("accessToken")
@@ -1000,14 +1011,24 @@ public class AccountManager {
         }
     }
 
-    private AccountStatus doValidateOrRefreshMicrosoft(ClientAccount account) {
+    private AccountStatus doValidateOrRefreshMicrosoft(ClientAccount account, ClientProvider provider) {
         long now = System.currentTimeMillis();
         account.setLastRefreshAttemptAt(now);
+
+        WawelAuth.debug(
+            "Validating Microsoft account " + account.getId()
+                + " ("
+                + account.getProfileName()
+                + ") on provider '"
+                + provider.getName()
+                + "' using proxy "
+                + org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport
+                    .describeProxySettings(provider.getProxySettings()));
 
         // Step 1: validate by calling Minecraft profile endpoint with current token.
         try {
             MicrosoftOAuthClient.MinecraftProfile profile = microsoftOAuthClient
-                .fetchMinecraftProfile(account.getAccessToken());
+                .fetchMinecraftProfile(account.getAccessToken(), provider.getProxySettings());
             account.setUserUuid(UuidUtil.toUnsigned(profile.getUuid()));
             account.setProfileUuid(profile.getUuid());
             account.setProfileName(profile.getName());
@@ -1046,7 +1067,7 @@ public class AccountManager {
 
         try {
             MicrosoftOAuthClient.LoginResult refreshed = microsoftOAuthClient
-                .refreshFromToken(account.getRefreshToken(), s -> {});
+                .refreshFromToken(account.getRefreshToken(), provider.getProxySettings(), s -> {});
 
             account.setAccessToken(refreshed.getMinecraftAccessToken());
             account.setRefreshToken(refreshed.getMicrosoftRefreshToken());
@@ -1138,14 +1159,28 @@ public class AccountManager {
             Map<String, String> skinFields = new LinkedHashMap<>();
             skinFields.put("model", skinSlim ? "slim" : "");
             String skinUrl = baseUrl + "/api/user/profile/" + profileId + "/skin";
-            httpClient.putMultipart(skinUrl, accessToken, "file", skinFile, imageContentTypeFor(skinFile), skinFields);
+            httpClient.putMultipart(
+                provider,
+                skinUrl,
+                accessToken,
+                "file",
+                skinFile,
+                imageContentTypeFor(skinFile),
+                skinFields);
             uploaded++;
         }
         if (capeFile != null) {
             ensureReadableImageFile(capeFile, "Cape");
             Map<String, String> capeFields = new LinkedHashMap<>();
             String capeUrl = baseUrl + "/api/user/profile/" + profileId + "/cape";
-            httpClient.putMultipart(capeUrl, accessToken, "file", capeFile, imageContentTypeFor(capeFile), capeFields);
+            httpClient.putMultipart(
+                provider,
+                capeUrl,
+                accessToken,
+                "file",
+                capeFile,
+                imageContentTypeFor(capeFile),
+                capeFields);
             uploaded++;
         }
 
@@ -1173,7 +1208,7 @@ public class AccountManager {
         ensureReadablePngFile(skinFile, "Skin");
 
         // Mojang/Microsoft accounts use Minecraft Services tokens; validate against profile endpoint.
-        AccountStatus status = doValidateOrRefreshMicrosoft(account);
+        AccountStatus status = doValidateOrRefreshMicrosoft(account, provider);
         if (status == AccountStatus.EXPIRED) {
             throw new IllegalArgumentException("Account token expired. Please re-authenticate first.");
         }
@@ -1187,7 +1222,7 @@ public class AccountManager {
 
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("variant", skinSlim ? "slim" : "classic");
-        httpClient.postMultipart(skinUrl, accessToken, "file", skinFile, "image/png", fields);
+        httpClient.postMultipart(provider, skinUrl, accessToken, "file", skinFile, "image/png", fields);
 
         String result = capeFile != null ? "Uploaded skin. Microsoft API does not support custom cape upload."
             : "Uploaded skin.";
@@ -1224,8 +1259,8 @@ public class AccountManager {
         String baseUrl = resolveServicesBase(provider);
         String profileId = UuidUtil.toUnsigned(account.getProfileUuid());
 
-        httpClient.deleteWithAuth(baseUrl + "/api/user/profile/" + profileId + "/skin", accessToken);
-        httpClient.deleteWithAuth(baseUrl + "/api/user/profile/" + profileId + "/cape", accessToken);
+        httpClient.deleteWithAuth(provider, baseUrl + "/api/user/profile/" + profileId + "/skin", accessToken);
+        httpClient.deleteWithAuth(provider, baseUrl + "/api/user/profile/" + profileId + "/cape", accessToken);
 
         String result = "Skin and cape reset.";
         WawelAuth.debug("Texture delete completed for account " + account.getId() + ": " + result);
@@ -1235,7 +1270,7 @@ public class AccountManager {
     private String doDeleteTexturesMicrosoft(ClientAccount account, ClientProvider provider)
         throws IOException, YggdrasilRequestException {
         // Validate/refresh Microsoft token.
-        AccountStatus status = doValidateOrRefreshMicrosoft(account);
+        AccountStatus status = doValidateOrRefreshMicrosoft(account, provider);
         if (status == AccountStatus.EXPIRED) {
             throw new IllegalArgumentException("Account token expired. Please re-authenticate first.");
         }
@@ -1245,7 +1280,7 @@ public class AccountManager {
 
         String accessToken = account.getAccessToken();
         String baseUrl = resolveServicesBase(provider);
-        httpClient.deleteWithAuth(baseUrl + "/minecraft/profile/skins/active", accessToken);
+        httpClient.deleteWithAuth(provider, baseUrl + "/minecraft/profile/skins/active", accessToken);
 
         String result = "Skin reset.";
         WawelAuth.debug("Texture delete completed for Microsoft account " + account.getId() + ": " + result);

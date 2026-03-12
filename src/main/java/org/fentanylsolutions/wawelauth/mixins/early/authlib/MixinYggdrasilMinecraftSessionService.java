@@ -1,9 +1,5 @@
 package org.fentanylsolutions.wawelauth.mixins.early.authlib;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
 import java.util.Base64;
@@ -17,6 +13,8 @@ import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTexture;
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTracker;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderRoutedHttp;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -186,6 +184,9 @@ public class MixinYggdrasilMinecraftSessionService {
         // Don't re-download if already tracked
         if (AnimatedCapeTracker.has(uuid)) return;
 
+        WawelClient client = WawelClient.instance();
+        if (client == null) return;
+
         // Parse the raw textures property for animated metadata
         try {
             for (Property prop : profile.getProperties()
@@ -218,12 +219,14 @@ public class MixinYggdrasilMinecraftSessionService {
                 String capeUrl = capeObj.get("url")
                     .getAsString();
                 WawelAuth.debug("Detected animated cape for " + uuid + " at " + capeUrl);
+                ClientProvider provider = client.getSessionBridge()
+                    .resolveTextureDownloadProvider(uuid);
 
                 final String locationPath = "capes/ingame/" + uuid.toString()
                     .replace("-", "");
                 CompletableFuture.supplyAsync(() -> {
                     try {
-                        byte[] gifBytes = wawelauth$downloadBytes(capeUrl);
+                        byte[] gifBytes = wawelauth$downloadBytes(capeUrl, provider);
                         // Decode on background thread (CPU only, no OpenGL)
                         return AnimatedCapeTexture.decodeGif(gifBytes);
                     } catch (Exception e) {
@@ -250,27 +253,8 @@ public class MixinYggdrasilMinecraftSessionService {
         }
     }
 
-    private static byte[] wawelauth$downloadBytes(String urlStr) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setConnectTimeout(10_000);
-        conn.setReadTimeout(15_000);
-        conn.setRequestProperty("User-Agent", "WawelAuth");
-        try {
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                throw new Exception("HTTP " + code);
-            }
-            try (InputStream in = conn.getInputStream()) {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int read;
-                while ((read = in.read(buf)) != -1) {
-                    baos.write(buf, 0, read);
-                }
-                return baos.toByteArray();
-            }
-        } finally {
-            conn.disconnect();
-        }
+    private static byte[] wawelauth$downloadBytes(String urlStr, ClientProvider provider) throws Exception {
+        return ProviderRoutedHttp
+            .downloadBytes(urlStr, provider, 10_000, 15_000, "WawelAuth", "Animated cape download");
     }
 }

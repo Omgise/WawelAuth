@@ -25,6 +25,7 @@ import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.client.render.IProviderAwareSkinManager;
 import org.fentanylsolutions.wawelauth.client.render.SkinTextureState;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
@@ -479,13 +480,19 @@ public class WawelSkinResolver {
 
         MinecraftProfileTexture skinTexture = textures.get(MinecraftProfileTexture.Type.SKIN);
         final MinecraftProfileTexture finalTexture = skinTexture;
+        final ClientProvider downloadProvider = sessionBridge.resolveTextureDownloadProvider(profileId, lookupContext);
         Minecraft.getMinecraft()
             .func_152344_a(() -> {
                 try {
                     SkinManager skinManager = Minecraft.getMinecraft()
                         .func_152342_ad();
-                    ResourceLocation registeredLocation = skinManager
-                        .func_152792_a(finalTexture, MinecraftProfileTexture.Type.SKIN);
+                    ResourceLocation registeredLocation = skinManager instanceof IProviderAwareSkinManager
+                        ? ((IProviderAwareSkinManager) skinManager).wawelauth$loadTexture(
+                            finalTexture,
+                            MinecraftProfileTexture.Type.SKIN,
+                            null,
+                            downloadProvider)
+                        : skinManager.func_152792_a(finalTexture, MinecraftProfileTexture.Type.SKIN);
                     if (!hasUsableRegisteredTexture(registeredLocation)) {
                         WawelAuth.debug("Skin registration was not usable yet for " + profileId);
                         handleFetchFailure(entry);

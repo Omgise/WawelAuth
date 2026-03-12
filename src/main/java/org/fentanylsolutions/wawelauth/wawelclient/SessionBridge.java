@@ -469,7 +469,7 @@ public class SessionBridge {
         body.addProperty("serverId", serverId);
 
         try {
-            httpClient.postJson(provider.sessionUrl("/session/minecraft/join"), body);
+            httpClient.postJson(provider, provider.sessionUrl("/session/minecraft/join"), body);
             WawelAuth.debug("joinServer succeeded for provider '" + provider.getName() + "'");
         } catch (YggdrasilRequestException e) {
             // If the selected provider is local and its API module is disabled/unavailable,
@@ -671,6 +671,48 @@ public class SessionBridge {
         return lookupProfileFromProvider(provider, profile, requireSecure);
     }
 
+    public GameProfile fillProfileFromProvider(ClientProvider provider, GameProfile profile, boolean requireSecure) {
+        if (profile == null || profile.getId() == null || provider == null) {
+            return null;
+        }
+        if (isOfflineProvider(provider)) {
+            return profile;
+        }
+        return lookupProfileFromProvider(provider, profile, requireSecure);
+    }
+
+    public ClientProvider resolveTextureDownloadProvider(UUID profileId) {
+        return resolveTextureDownloadProvider(profileId, activeLookupContext.get());
+    }
+
+    public ClientProvider resolveTextureDownloadProvider(UUID profileId, LookupContext lookupContext) {
+        if (lookupContext != null) {
+            ClientProvider direct = lookupContext.getProvider();
+            if (isUsableProfileProvider(direct)) {
+                return direct;
+            }
+            return selectSingleUsableProvider(lookupContext.getTrustedProviders());
+        }
+
+        if (isClientWorldLoaded()) {
+            if (isUsableProfileProvider(activeProvider)) {
+                return activeProvider;
+            }
+            return selectSingleUsableProvider(trustedProviders);
+        }
+
+        MenuProfileLookupContext menuLookup = resolveMenuProfileLookup(profileId);
+        if (menuLookup != null) {
+            ClientProvider direct = menuLookup.getProvider();
+            if (isUsableProfileProvider(direct)) {
+                return direct;
+            }
+            return selectSingleUsableProvider(menuLookup.getTrustedProviders());
+        }
+
+        return resolveUniqueLocalProviderForProfile(profileId);
+    }
+
     private ClientProvider resolveProviderForProfile(UUID profileId) {
         if (profileId == null || accountDAO == null || providerDAO == null) {
             return null;
@@ -695,6 +737,45 @@ public class SessionBridge {
             }
         }
         return null;
+    }
+
+    private ClientProvider resolveUniqueLocalProviderForProfile(UUID profileId) {
+        if (profileId == null || accountDAO == null || providerDAO == null) {
+            return null;
+        }
+
+        ClientProvider resolved = null;
+        String resolvedIdentity = null;
+
+        for (ClientAccount account : accountDAO.listAll()) {
+            if (account == null || account.getProfileUuid() == null || !profileId.equals(account.getProfileUuid())) {
+                continue;
+            }
+
+            String providerName = account.getProviderName();
+            if (providerName == null || providerName.trim()
+                .isEmpty()) {
+                continue;
+            }
+
+            ClientProvider provider = providerDAO.findByName(providerName);
+            if (!isUsableProfileProvider(provider)) {
+                continue;
+            }
+
+            String identity = providerIdentity(provider);
+            if (resolved == null) {
+                resolved = provider;
+                resolvedIdentity = identity;
+                continue;
+            }
+
+            if (!resolvedIdentity.equals(identity)) {
+                return null;
+            }
+        }
+
+        return resolved;
     }
 
     private MenuProfileLookupContext resolveMenuProfileLookup(UUID profileId) {
@@ -802,7 +883,7 @@ public class SessionBridge {
             validateBody.addProperty("accessToken", token);
 
             try {
-                httpClient.postJson(mojang.authUrl("/validate"), validateBody);
+                httpClient.postJson(mojang, mojang.authUrl("/validate"), validateBody);
             } catch (YggdrasilRequestException e) {
                 WawelAuth.debug("Launcher session token validation failed: " + e.getMessage());
                 return;
@@ -1226,6 +1307,33 @@ public class SessionBridge {
         return false;
     }
 
+    private static ClientProvider selectSingleUsableProvider(List<ClientProvider> providers) {
+        if (providers == null || providers.isEmpty()) {
+            return null;
+        }
+
+        ClientProvider resolved = null;
+        String resolvedIdentity = null;
+        for (ClientProvider provider : providers) {
+            if (!isUsableProfileProvider(provider)) {
+                continue;
+            }
+
+            String identity = providerIdentity(provider);
+            if (resolved == null) {
+                resolved = provider;
+                resolvedIdentity = identity;
+                continue;
+            }
+
+            if (!resolvedIdentity.equals(identity)) {
+                return null;
+            }
+        }
+
+        return resolved;
+    }
+
     private static boolean containsMojangProvider(List<ClientProvider> providers) {
         if (providers == null || providers.isEmpty()) {
             return false;
@@ -1506,7 +1614,14 @@ public class SessionBridge {
                 url += "?unsigned=false";
             }
 
-            JsonObject response = httpClient.getJson(url);
+            WawelAuth.debug(
+                "Fetching profile properties for " + profile.getId()
+                    + " from provider '"
+                    + provider.getName()
+                    + "' using proxy "
+                    + org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport
+                        .describeProxySettings(provider.getProxySettings()));
+            JsonObject response = httpClient.getJson(provider, url);
             return buildProfileFromJson(profile, response);
         } catch (Exception e) {
             WawelAuth.debug(

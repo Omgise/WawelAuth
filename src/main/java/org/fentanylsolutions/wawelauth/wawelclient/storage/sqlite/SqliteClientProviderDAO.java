@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxyType;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderType;
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientProviderDAO;
 import org.fentanylsolutions.wawelauth.wawelcore.storage.sqlite.EnumUtil;
@@ -33,6 +34,14 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
         p.setPublicKeyFingerprint(rs.getString("public_key_fingerprint"));
         p.setCreatedAt(rs.getLong("created_at"));
         p.setManualEntry(rs.getInt("manual_added") != 0);
+        p.setProxyEnabled(rs.getInt("proxy_enabled") != 0);
+        p.setProxyType(
+            EnumUtil.parseOrDefault(ProviderProxyType.class, rs.getString("proxy_type"), ProviderProxyType.HTTP));
+        p.setProxyHost(rs.getString("proxy_host"));
+        int proxyPort = rs.getInt("proxy_port");
+        p.setProxyPort(rs.wasNull() ? null : Integer.valueOf(proxyPort));
+        p.setProxyUsername(rs.getString("proxy_username"));
+        p.setProxyPassword(rs.getString("proxy_password"));
         return p;
     }
 
@@ -68,8 +77,9 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
         db.execute(conn -> {
             try (PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO providers (name, type, api_root, auth_server_url, session_server_url, "
-                    + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added) "
-                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added, "
+                    + "proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
                 ps.setString(1, p.getName());
                 ps.setString(
                     2,
@@ -84,6 +94,22 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
                 ps.setString(9, p.getPublicKeyFingerprint());
                 ps.setLong(10, p.getCreatedAt());
                 ps.setInt(11, p.isManualEntry() ? 1 : 0);
+                ps.setInt(12, p.isProxyEnabled() ? 1 : 0);
+                ps.setString(
+                    13,
+                    p.getProxyType()
+                        .name());
+                ps.setString(14, p.getProxyHost());
+                if (p.getProxyPort() != null) {
+                    ps.setInt(
+                        15,
+                        p.getProxyPort()
+                            .intValue());
+                } else {
+                    ps.setNull(15, java.sql.Types.INTEGER);
+                }
+                ps.setString(16, p.getProxyUsername());
+                ps.setString(17, p.getProxyPassword());
                 ps.executeUpdate();
             }
         });
@@ -95,7 +121,8 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
             try (PreparedStatement ps = conn.prepareStatement(
                 "UPDATE providers SET type = ?, api_root = ?, auth_server_url = ?, session_server_url = ?, "
                     + "services_url = ?, skin_domains = ?, public_key = ?, public_key_fingerprint = ?, "
-                    + "created_at = ?, manual_added = ? WHERE name = ?")) {
+                    + "created_at = ?, manual_added = ?, proxy_enabled = ?, proxy_type = ?, proxy_host = ?, "
+                    + "proxy_port = ?, proxy_username = ?, proxy_password = ? WHERE name = ?")) {
                 ps.setString(
                     1,
                     p.getType()
@@ -109,7 +136,23 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
                 ps.setString(8, p.getPublicKeyFingerprint());
                 ps.setLong(9, p.getCreatedAt());
                 ps.setInt(10, p.isManualEntry() ? 1 : 0);
-                ps.setString(11, p.getName());
+                ps.setInt(11, p.isProxyEnabled() ? 1 : 0);
+                ps.setString(
+                    12,
+                    p.getProxyType()
+                        .name());
+                ps.setString(13, p.getProxyHost());
+                if (p.getProxyPort() != null) {
+                    ps.setInt(
+                        14,
+                        p.getProxyPort()
+                            .intValue());
+                } else {
+                    ps.setNull(14, java.sql.Types.INTEGER);
+                }
+                ps.setString(15, p.getProxyUsername());
+                ps.setString(16, p.getProxyPassword());
+                ps.setString(17, p.getName());
                 ps.executeUpdate();
             }
         });
@@ -136,9 +179,11 @@ public class SqliteClientProviderDAO implements ClientProviderDAO {
             db.execute(conn -> {
                 try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO providers (name, type, api_root, auth_server_url, session_server_url, "
-                        + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added) "
+                        + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added, "
+                        + "proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password) "
                         + "SELECT ?, type, api_root, auth_server_url, session_server_url, "
-                        + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added "
+                        + "services_url, skin_domains, public_key, public_key_fingerprint, created_at, manual_added, "
+                        + "proxy_enabled, proxy_type, proxy_host, proxy_port, proxy_username, proxy_password "
                         + "FROM providers WHERE name = ?")) {
                     ps.setString(1, newName);
                     ps.setString(2, oldName);

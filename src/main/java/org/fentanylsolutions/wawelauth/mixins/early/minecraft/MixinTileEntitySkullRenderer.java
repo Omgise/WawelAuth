@@ -3,6 +3,7 @@ package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 import net.minecraft.client.model.ModelRenderer;
 import net.minecraft.client.model.ModelSkeletonHead;
 import net.minecraft.client.renderer.tileentity.TileEntitySkullRenderer;
+import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.api.SkinRequest;
@@ -17,11 +18,13 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyVariable;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.sugar.Local;
-import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture;
+import com.mojang.authlib.minecraft.MinecraftProfileTexture.Type;
 
 /**
  * Renders 3D hat layer on player skull blocks/items.
@@ -73,26 +76,27 @@ public class MixinTileEntitySkullRenderer {
         float scale = 1.0F / 16.0F;
         float voxelSize = SkinLayers3DConfig.skullVoxelSize;
 
+        // Save and restore GL state to prevent leaking blend/color into subsequent rendering
+        GL11.glPushAttrib(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_CURRENT_BIT);
         GL11.glEnable(GL11.GL_BLEND);
         GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
 
         hatMesh.setPosition(0, 0, 0);
         hatMesh.setRotation(head.rotateAngleX, head.rotateAngleY, head.rotateAngleZ);
         hatMesh.render(scale, voxelSize);
+
+        GL11.glPopAttrib();
     }
 
-    @Inject(
+    @Redirect(
         method = "func_152674_a",
         at = @At(
             value = "INVOKE",
-            target = "Lnet/minecraft/client/renderer/tileentity/TileEntitySkullRenderer;bindTexture(Lnet/minecraft/util/ResourceLocation;)V",
-            ordinal = 3,
-            shift = At.Shift.BEFORE))
-    private void wawelauth$replaceSkin(float x, float y, float z, int facing, float rotation, int skullType,
-        GameProfile profile, CallbackInfo ci, @Local LocalRef<ResourceLocation> resourcelocation) {
-        ResourceLocation skinLocation = wawelauth$getSkinForProfile(profile);
-        if (skinLocation == null) return;
-        resourcelocation.set(skinLocation);
+            target = "Lnet/minecraft/client/resources/SkinManager;func_152792_a(Lcom/mojang/authlib/minecraft/MinecraftProfileTexture;Lcom/mojang/authlib/minecraft/MinecraftProfileTexture$Type;)Lnet/minecraft/util/ResourceLocation;"))
+    private ResourceLocation wawelauth$useResolverSkin(SkinManager skinManager, MinecraftProfileTexture texture,
+        Type textureType, float x, float y, float z, int facing, float rotation, int skullType, GameProfile profile) {
+        ResourceLocation resolved = wawelauth$getSkinForProfile(profile);
+        return resolved != null ? resolved : skinManager.func_152792_a(texture, textureType);
     }
 
     /**

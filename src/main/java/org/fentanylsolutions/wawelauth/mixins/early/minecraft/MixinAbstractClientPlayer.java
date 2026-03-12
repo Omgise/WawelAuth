@@ -3,20 +3,27 @@ package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 import java.util.UUID;
 
 import net.minecraft.client.entity.AbstractClientPlayer;
+import net.minecraft.client.resources.SkinManager;
 import net.minecraft.entity.Entity;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTexture;
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTracker;
+import org.fentanylsolutions.wawelauth.client.render.IProviderAwareSkinManager;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
+import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+import com.mojang.authlib.GameProfile;
 
 /**
  * Two injection points:
@@ -37,6 +44,29 @@ public class MixinAbstractClientPlayer {
             return;
         }
         locationStevePng = new ResourceLocation("wawelauth", "textures/steve_64.png");
+    }
+
+    @Redirect(
+        method = "<init>",
+        at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/client/resources/SkinManager;func_152790_a(Lcom/mojang/authlib/GameProfile;Lnet/minecraft/client/resources/SkinManager$SkinAvailableCallback;Z)V"))
+    private void wawelauth$loadPlayerTexturesWithProvider(SkinManager skinManager, GameProfile profile,
+        SkinManager.SkinAvailableCallback callback, boolean requireSecure) {
+        ClientProvider provider = null;
+        WawelClient client = WawelClient.instance();
+        if (client != null) {
+            provider = client.getSessionBridge()
+                .resolveTextureDownloadProvider(profile != null ? profile.getId() : null);
+        }
+
+        if (skinManager instanceof IProviderAwareSkinManager) {
+            ((IProviderAwareSkinManager) skinManager)
+                .wawelauth$loadProfileTextures(profile, callback, requireSecure, provider);
+            return;
+        }
+
+        skinManager.func_152790_a(profile, callback, requireSecure);
     }
 
     @Inject(method = "getLocationCape", at = @At("RETURN"), cancellable = true)

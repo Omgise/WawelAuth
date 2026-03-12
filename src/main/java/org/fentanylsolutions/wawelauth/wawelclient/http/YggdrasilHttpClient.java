@@ -8,12 +8,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxySettings;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -33,6 +34,13 @@ public class YggdrasilHttpClient {
     private static final int MAX_ALI_HOPS = 5;
     private static final String CONTENT_TYPE_JSON = "application/json; charset=utf-8";
     private static final String ALI_HEADER = "X-Authlib-Injector-API-Location";
+    private static final String USER_AGENT = "WawelAuth";
+
+    private final JdkProxyHttpClient jdkProxyHttpClient = new JdkProxyHttpClient(
+        CONNECT_TIMEOUT_MS,
+        READ_TIMEOUT_MS,
+        MAX_RESPONSE_BYTES,
+        USER_AGENT);
 
     /**
      * Perform a JSON POST request.
@@ -44,24 +52,36 @@ public class YggdrasilHttpClient {
      * @throws IOException               on network errors (unreachable, timeout, etc.)
      */
     public JsonObject postJson(String url, JsonObject body) throws IOException, YggdrasilRequestException {
-        WawelAuth.debug("HTTP POST " + url);
+        return postJson(null, url, body);
+    }
+
+    public JsonObject postJson(ClientProvider provider, String url, JsonObject body)
+        throws IOException, YggdrasilRequestException {
         byte[] bodyBytes = body.toString()
             .getBytes(StandardCharsets.UTF_8);
 
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", CONTENT_TYPE_JSON);
-            conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
-            conn.setDoOutput(true);
+        ProviderProxySettings settings = settingsFor(provider);
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest("POST", provider, url, settings, "jdk-http-client");
+            return jdkProxyHttpClient.postJson(url, body, settings);
+        }
+        debugRequest("POST", provider, url, settings, "urlconnection");
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            HttpURLConnection conn = openConnection(url, settings);
+            try {
+                conn.setRequestMethod("POST");
+                conn.setRequestProperty("Content-Type", CONTENT_TYPE_JSON);
+                conn.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
+                conn.setDoOutput(true);
 
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(bodyBytes);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(bodyBytes);
+                }
+
+                return handleResponse(conn);
+            } finally {
+                conn.disconnect();
             }
-
-            return handleResponse(conn);
-        } finally {
-            conn.disconnect();
         }
     }
 
@@ -74,16 +94,26 @@ public class YggdrasilHttpClient {
      * @throws IOException               on network errors
      */
     public JsonObject getJson(String url) throws IOException, YggdrasilRequestException {
-        WawelAuth.debug("HTTP GET " + url);
+        return getJson(null, url);
+    }
 
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("GET");
-            conn.setRequestProperty("Accept", "application/json");
+    public JsonObject getJson(ClientProvider provider, String url) throws IOException, YggdrasilRequestException {
+        ProviderProxySettings settings = settingsFor(provider);
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest("GET", provider, url, settings, "jdk-http-client");
+            return jdkProxyHttpClient.getJson(url, settings);
+        }
+        debugRequest("GET", provider, url, settings, "urlconnection");
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            HttpURLConnection conn = openConnection(url, settings);
+            try {
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "application/json");
 
-            return handleResponse(conn);
-        } finally {
-            conn.disconnect();
+                return handleResponse(conn);
+            } finally {
+                conn.disconnect();
+            }
         }
     }
 
@@ -100,7 +130,12 @@ public class YggdrasilHttpClient {
      */
     public JsonObject putMultipart(String url, String bearerToken, String fileField, File file, String contentType,
         Map<String, String> textFields) throws IOException, YggdrasilRequestException {
-        return sendMultipart("PUT", url, bearerToken, fileField, file, contentType, textFields);
+        return putMultipart(null, url, bearerToken, fileField, file, contentType, textFields);
+    }
+
+    public JsonObject putMultipart(ClientProvider provider, String url, String bearerToken, String fileField, File file,
+        String contentType, Map<String, String> textFields) throws IOException, YggdrasilRequestException {
+        return sendMultipart("PUT", provider, url, bearerToken, fileField, file, contentType, textFields);
     }
 
     /**
@@ -116,7 +151,12 @@ public class YggdrasilHttpClient {
      */
     public JsonObject postMultipart(String url, String bearerToken, String fileField, File file, String contentType,
         Map<String, String> textFields) throws IOException, YggdrasilRequestException {
-        return sendMultipart("POST", url, bearerToken, fileField, file, contentType, textFields);
+        return postMultipart(null, url, bearerToken, fileField, file, contentType, textFields);
+    }
+
+    public JsonObject postMultipart(ClientProvider provider, String url, String bearerToken, String fileField,
+        File file, String contentType, Map<String, String> textFields) throws IOException, YggdrasilRequestException {
+        return sendMultipart("POST", provider, url, bearerToken, fileField, file, contentType, textFields);
     }
 
     /**
@@ -129,23 +169,35 @@ public class YggdrasilHttpClient {
      * @throws IOException               on network errors
      */
     public JsonObject deleteWithAuth(String url, String bearerToken) throws IOException, YggdrasilRequestException {
-        WawelAuth.debug("HTTP DELETE " + url);
+        return deleteWithAuth(null, url, bearerToken);
+    }
 
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod("DELETE");
-            if (bearerToken != null && !bearerToken.trim()
-                .isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+    public JsonObject deleteWithAuth(ClientProvider provider, String url, String bearerToken)
+        throws IOException, YggdrasilRequestException {
+        ProviderProxySettings settings = settingsFor(provider);
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest("DELETE", provider, url, settings, "jdk-http-client");
+            return jdkProxyHttpClient.deleteWithAuth(url, bearerToken, settings);
+        }
+        debugRequest("DELETE", provider, url, settings, "urlconnection");
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            HttpURLConnection conn = openConnection(url, settings);
+            try {
+                conn.setRequestMethod("DELETE");
+                if (bearerToken != null && !bearerToken.trim()
+                    .isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
+                }
+                return handleResponse(conn);
+            } finally {
+                conn.disconnect();
             }
-            return handleResponse(conn);
-        } finally {
-            conn.disconnect();
         }
     }
 
-    private JsonObject sendMultipart(String method, String url, String bearerToken, String fileField, File file,
-        String contentType, Map<String, String> textFields) throws IOException, YggdrasilRequestException {
+    private JsonObject sendMultipart(String method, ClientProvider provider, String url, String bearerToken,
+        String fileField, File file, String contentType, Map<String, String> textFields)
+        throws IOException, YggdrasilRequestException {
         if (file == null || !file.isFile()) {
             throw new IOException("Upload file does not exist: " + (file != null ? file.getAbsolutePath() : "null"));
         }
@@ -155,31 +207,40 @@ public class YggdrasilHttpClient {
         String boundary = "----WawelAuthBoundary" + UUID.randomUUID()
             .toString()
             .replace("-", "");
-        HttpURLConnection conn = openConnection(url);
-        try {
-            conn.setRequestMethod(method);
-            conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-            conn.setRequestProperty("Accept", "application/json");
-            if (bearerToken != null && !bearerToken.trim()
-                .isEmpty()) {
-                conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
-            }
-            conn.setDoOutput(true);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                if (textFields != null) {
-                    for (Map.Entry<String, String> entry : textFields.entrySet()) {
-                        writeTextPart(os, boundary, entry.getKey(), entry.getValue());
-                    }
+        ProviderProxySettings settings = settingsFor(provider);
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest(method, provider, url, settings, "jdk-http-client");
+            return jdkProxyHttpClient
+                .sendMultipart(method, url, bearerToken, fileField, file, contentType, textFields, settings);
+        }
+        debugRequest(method, provider, url, settings, "urlconnection");
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            HttpURLConnection conn = openConnection(url, settings);
+            try {
+                conn.setRequestMethod(method);
+                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                conn.setRequestProperty("Accept", "application/json");
+                if (bearerToken != null && !bearerToken.trim()
+                    .isEmpty()) {
+                    conn.setRequestProperty("Authorization", "Bearer " + bearerToken);
                 }
-                writeFilePart(os, boundary, fileField, file, contentType);
-                os.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-                os.flush();
-            }
+                conn.setDoOutput(true);
 
-            return handleResponse(conn);
-        } finally {
-            conn.disconnect();
+                try (OutputStream os = conn.getOutputStream()) {
+                    if (textFields != null) {
+                        for (Map.Entry<String, String> entry : textFields.entrySet()) {
+                            writeTextPart(os, boundary, entry.getKey(), entry.getValue());
+                        }
+                    }
+                    writeFilePart(os, boundary, fileField, file, contentType);
+                    os.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+                    os.flush();
+                }
+
+                return handleResponse(conn);
+            } finally {
+                conn.disconnect();
+            }
         }
     }
 
@@ -200,41 +261,51 @@ public class YggdrasilHttpClient {
      * @throws IOException on network errors
      */
     public String resolveApiRoot(String userUrl) throws IOException {
+        return resolveApiRoot(userUrl, null);
+    }
+
+    public String resolveApiRoot(String userUrl, ProviderProxySettings settings) throws IOException {
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest("GET", null, userUrl, settings, "jdk-http-client");
+            return jdkProxyHttpClient.resolveApiRoot(userUrl, settings);
+        }
         // Only ensure scheme: do NOT strip trailing slash yet, as URI.resolve()
         // needs it to correctly resolve relative paths:
         // URI("https://ex.com/api/").resolve("other") → "https://ex.com/api/other"
         // URI("https://ex.com/api").resolve("other") → "https://ex.com/other"
         String currentUrl = ensureScheme(userUrl);
 
-        for (int hop = 0; hop < MAX_ALI_HOPS; hop++) {
-            WawelAuth.debug("ALI resolve hop " + hop + ": " + currentUrl);
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            for (int hop = 0; hop < MAX_ALI_HOPS; hop++) {
+                WawelAuth.debug("ALI resolve hop " + hop + ": " + currentUrl);
 
-            HttpURLConnection conn = openConnection(currentUrl);
-            try {
-                conn.setRequestMethod("GET");
-                conn.setRequestProperty("Accept", "application/json");
-                conn.setInstanceFollowRedirects(true);
+                HttpURLConnection conn = openConnection(currentUrl, settings);
+                try {
+                    conn.setRequestMethod("GET");
+                    conn.setRequestProperty("Accept", "application/json");
+                    conn.setInstanceFollowRedirects(true);
 
-                // We don't care about the response body here, just the header
-                conn.getResponseCode();
+                    // We don't care about the response body here, just the header
+                    conn.getResponseCode();
 
-                String aliLocation = conn.getHeaderField(ALI_HEADER);
-                if (aliLocation == null || aliLocation.isEmpty()) {
-                    // No ALI header: current URL is the API root
-                    break;
+                    String aliLocation = conn.getHeaderField(ALI_HEADER);
+                    if (aliLocation == null || aliLocation.isEmpty()) {
+                        // No ALI header: current URL is the API root
+                        break;
+                    }
+
+                    // Resolve against current URL (which may have trailing slash)
+                    String resolvedUrl = resolveAbsolute(currentUrl, aliLocation);
+
+                    // Compare after stripping trailing slash to detect self-references
+                    if (stripTrailingSlashes(resolvedUrl).equals(stripTrailingSlashes(currentUrl))) {
+                        break;
+                    }
+
+                    currentUrl = resolvedUrl;
+                } finally {
+                    conn.disconnect();
                 }
-
-                // Resolve against current URL (which may have trailing slash)
-                String resolvedUrl = resolveAbsolute(currentUrl, aliLocation);
-
-                // Compare after stripping trailing slash to detect self-references
-                if (stripTrailingSlashes(resolvedUrl).equals(stripTrailingSlashes(currentUrl))) {
-                    break;
-                }
-
-                currentUrl = resolvedUrl;
-            } finally {
-                conn.disconnect();
             }
         }
 
@@ -242,13 +313,45 @@ public class YggdrasilHttpClient {
         return stripTrailingSlashes(currentUrl);
     }
 
-    private HttpURLConnection openConnection(String url) throws IOException {
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        conn.setReadTimeout(READ_TIMEOUT_MS);
-        conn.setInstanceFollowRedirects(true);
-        conn.setRequestProperty("User-Agent", "WawelAuth");
-        return conn;
+    public int probeReachability(String url, ProviderProxySettings settings) throws IOException {
+        if (jdkProxyHttpClient.supports(settings)) {
+            debugRequest("PROBE", null, url, settings, "jdk-http-client");
+            return jdkProxyHttpClient.probeReachability(url, settings);
+        }
+        debugRequest("PROBE", null, url, settings, "urlconnection");
+        try (ProviderProxySupport.AuthContext ignored = ProviderProxySupport.enterAuthContext(settings)) {
+            HttpURLConnection conn = openConnection(url, settings);
+            try {
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("Accept", "*/*");
+                return conn.getResponseCode();
+            } finally {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private HttpURLConnection openConnection(String url, ProviderProxySettings settings) throws IOException {
+        return ProviderProxySupport.openConnection(url, settings, CONNECT_TIMEOUT_MS, READ_TIMEOUT_MS, USER_AGENT);
+    }
+
+    private static ProviderProxySettings settingsFor(ClientProvider provider) {
+        return provider != null ? provider.getProxySettings() : null;
+    }
+
+    private static void debugRequest(String method, ClientProvider provider, String url, ProviderProxySettings settings,
+        String transport) {
+        WawelAuth.debug(
+            "HTTP " + method
+                + " "
+                + url
+                + " [provider="
+                + (provider != null ? provider.getName() : "-")
+                + ", proxy="
+                + ProviderProxySupport.describeProxySettings(settings)
+                + ", transport="
+                + transport
+                + "]");
     }
 
     private JsonObject handleResponse(HttpURLConnection conn) throws IOException, YggdrasilRequestException {

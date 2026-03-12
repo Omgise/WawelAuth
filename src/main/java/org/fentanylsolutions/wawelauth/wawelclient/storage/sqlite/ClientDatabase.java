@@ -20,7 +20,7 @@ import org.fentanylsolutions.wawelauth.wawelcore.storage.sqlite.SqliteDatabase;
  */
 public class ClientDatabase extends SqliteDatabase {
 
-    private static final int CURRENT_VERSION = 3;
+    private static final int CURRENT_VERSION = 4;
 
     public ClientDatabase(File dbFile) {
         super(dbFile);
@@ -44,6 +44,14 @@ public class ClientDatabase extends SqliteDatabase {
         }
         if (version < 3 || !hasColumn("providers", "manual_added")) {
             migrateToV3();
+        }
+        if (version < 4 || !hasColumn("providers", "proxy_enabled")
+            || !hasColumn("providers", "proxy_type")
+            || !hasColumn("providers", "proxy_host")
+            || !hasColumn("providers", "proxy_port")
+            || !hasColumn("providers", "proxy_username")
+            || !hasColumn("providers", "proxy_password")) {
+            migrateToV4();
         }
 
         // Future: if (version < 4) { migrateToV4(); }
@@ -70,7 +78,13 @@ public class ClientDatabase extends SqliteDatabase {
                         public_key TEXT,
                         public_key_fingerprint TEXT,
                         created_at INTEGER NOT NULL,
-                        manual_added INTEGER NOT NULL DEFAULT 1
+                        manual_added INTEGER NOT NULL DEFAULT 1,
+                        proxy_enabled INTEGER NOT NULL DEFAULT 0,
+                        proxy_type TEXT,
+                        proxy_host TEXT,
+                        proxy_port INTEGER,
+                        proxy_username TEXT,
+                        proxy_password TEXT
                     )""");
 
                 stmt.execute("""
@@ -128,6 +142,52 @@ public class ClientDatabase extends SqliteDatabase {
             });
         }
         WawelAuth.LOG.info("Client DB migrated to version 3");
+    }
+
+    private void migrateToV4() {
+        if (!hasColumn("providers", "proxy_enabled")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_enabled INTEGER NOT NULL DEFAULT 0");
+                }
+            });
+        }
+        if (!hasColumn("providers", "proxy_type")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_type TEXT");
+                }
+            });
+        }
+        if (!hasColumn("providers", "proxy_host")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_host TEXT");
+                }
+            });
+        }
+        if (!hasColumn("providers", "proxy_port")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_port INTEGER");
+                }
+            });
+        }
+        if (!hasColumn("providers", "proxy_username")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_username TEXT");
+                }
+            });
+        }
+        if (!hasColumn("providers", "proxy_password")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE providers ADD COLUMN proxy_password TEXT");
+                }
+            });
+        }
+        WawelAuth.LOG.info("Client DB migrated to version 4");
     }
 
     private boolean hasColumn(String tableName, String columnName) {

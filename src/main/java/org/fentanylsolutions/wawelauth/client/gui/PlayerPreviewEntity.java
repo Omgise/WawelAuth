@@ -1,9 +1,5 @@
 package org.fentanylsolutions.wawelauth.client.gui;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
@@ -12,7 +8,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraft.client.renderer.IImageBuffer;
 import net.minecraft.client.renderer.ImageBufferDownload;
-import net.minecraft.client.renderer.ThreadDownloadImageData;
 import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.util.ResourceLocation;
@@ -20,6 +15,9 @@ import net.minecraft.util.ResourceLocation;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
 import org.fentanylsolutions.wawelauth.client.render.ISkinModelOverride;
+import org.fentanylsolutions.wawelauth.client.render.ProviderThreadDownloadImageData;
+import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderRoutedHttp;
 import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 
@@ -110,10 +108,14 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
     }
 
     public void setSkinFromUrl(String url, UUID profileUuid, long requestId) {
+        setSkinFromUrl(url, profileUuid, requestId, null);
+    }
+
+    public void setSkinFromUrl(String url, UUID profileUuid, long requestId, ClientProvider provider) {
         if (isRequestStale(requestId)) return;
 
         ResourceLocation location = makeSkinLocation(profileUuid);
-        loadTexture(location, url, true);
+        loadTexture(location, url, true, provider);
 
         if (!isRequestStale(requestId)) {
             unloadOldSkin(location);
@@ -131,10 +133,14 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
     }
 
     public void setCapeFromUrl(String url, UUID profileUuid, long requestId) {
+        setCapeFromUrl(url, profileUuid, requestId, null);
+    }
+
+    public void setCapeFromUrl(String url, UUID profileUuid, long requestId, ClientProvider provider) {
         if (isRequestStale(requestId)) return;
 
         ResourceLocation location = makeCapeLocation(profileUuid);
-        loadTexture(location, url, false);
+        loadTexture(location, url, false, provider);
 
         if (!isRequestStale(requestId)) {
             unloadOldCape(location);
@@ -157,17 +163,22 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
      * AnimatedCapeTexture for preview rendering.
      */
     public void setCapeAnimated(String url, UUID profileUuid, long requestId) {
-        setCapeAnimated(url, profileUuid, requestId, null);
+        setCapeAnimated(url, profileUuid, requestId, null, null);
     }
 
     public void setCapeAnimated(String url, UUID profileUuid, long requestId, Runnable onReady) {
+        setCapeAnimated(url, profileUuid, requestId, null, onReady);
+    }
+
+    public void setCapeAnimated(String url, UUID profileUuid, long requestId, ClientProvider provider,
+        Runnable onReady) {
         if (isRequestStale(requestId)) return;
 
         final String locationPath = "capes/" + texturePrefix + "/anim/" + UuidUtil.toUnsigned(profileUuid);
 
         CompletableFuture.supplyAsync(() -> {
             try {
-                byte[] gifBytes = downloadBytes(url);
+                byte[] gifBytes = downloadBytes(url, provider);
                 // Decode on background thread (CPU only, no OpenGL)
                 return AnimatedCapeTexture.decodeGif(gifBytes);
             } catch (Exception e) {
@@ -270,7 +281,8 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
         return new ResourceLocation("wawelauth", "capes/" + texturePrefix + "/" + UuidUtil.toUnsigned(uuid));
     }
 
-    private static void loadTexture(ResourceLocation location, String url, boolean useSkinBuffer) {
+    private static void loadTexture(ResourceLocation location, String url, boolean useSkinBuffer,
+        ClientProvider provider) {
         TextureManager texMgr = Minecraft.getMinecraft().renderEngine;
 
         ITextureObject existing = texMgr.getTexture(location);
@@ -279,37 +291,19 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
         }
 
         IImageBuffer buffer = useSkinBuffer ? new ImageBufferDownload() : null;
-        ThreadDownloadImageData texture = new ThreadDownloadImageData(
+        ProviderThreadDownloadImageData texture = new ProviderThreadDownloadImageData(
             null,
             url,
             WawelSkinResolver.getDefaultSkin(),
-            buffer);
+            buffer,
+            provider);
 
         texMgr.loadTexture(location, texture);
         WawelAuth.debug("Loading texture from " + url + " at " + location);
     }
 
-    private static byte[] downloadBytes(String urlStr) throws Exception {
-        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
-        conn.setConnectTimeout(10_000);
-        conn.setReadTimeout(15_000);
-        conn.setRequestProperty("User-Agent", "WawelAuth");
-        try {
-            int code = conn.getResponseCode();
-            if (code != 200) {
-                throw new Exception("HTTP " + code + " from " + urlStr);
-            }
-            try (InputStream in = conn.getInputStream()) {
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                byte[] buf = new byte[8192];
-                int read;
-                while ((read = in.read(buf)) != -1) {
-                    baos.write(buf, 0, read);
-                }
-                return baos.toByteArray();
-            }
-        } finally {
-            conn.disconnect();
-        }
+    private static byte[] downloadBytes(String urlStr, ClientProvider provider) throws Exception {
+        return ProviderRoutedHttp
+            .downloadBytes(urlStr, provider, 10_000, 15_000, "WawelAuth", "Preview binary download");
     }
 }
