@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 
+import java.util.UUID;
+
 import net.minecraft.client.model.ModelBase;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.model.ModelRenderer;
@@ -8,6 +10,7 @@ import net.minecraft.entity.Entity;
 import org.fentanylsolutions.wawelauth.client.render.IModelBipedModernExt;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DMesh;
+import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DSetup;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DState;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Mixin;
@@ -90,8 +93,7 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
 
     // -- 3D skin layers state --
     @Unique
-    private SkinLayers3DState wawelauth$skinLayers3D = null;
-
+    private UUID wawelauth$currentRenderingPlayerUuid = null;
     @Unique
     private static final int LAYER_PART_HAT = 0;
     @Unique
@@ -274,13 +276,18 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
     }
 
     @Override
+    public void wawelauth$setCurrentPlayerUuid(UUID uuid) {
+        this.wawelauth$currentRenderingPlayerUuid = uuid;
+    }
+
+    @Override
     public void wawelauth$renderRightArmWear(float scale) {
         if (!this.wawelauth$modernEnabled || !SkinLayers3DConfig.modernSkinSupport) return;
         if (this.bipedRightArm != null && this.wawelauth$rightArmWear != null) {
             wawelauth$copyAngles(this.bipedRightArm, this.wawelauth$rightArmWear);
         }
 
-        SkinLayers3DState state3d = this.wawelauth$skinLayers3D;
+        SkinLayers3DState state3d = SkinLayers3DSetup.getState(wawelauth$currentRenderingPlayerUuid);
         if (SkinLayers3DConfig.enabled && state3d != null && state3d.initialized) {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -293,16 +300,6 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
         } else if (this.wawelauth$rightArmWear != null) {
             this.wawelauth$rightArmWear.render(scale);
         }
-    }
-
-    @Override
-    public void wawelauth$setSkinLayers3D(SkinLayers3DState state) {
-        this.wawelauth$skinLayers3D = state;
-    }
-
-    @Override
-    public SkinLayers3DState wawelauth$getSkinLayers3D() {
-        return this.wawelauth$skinLayers3D;
     }
 
     // Saved showModel state for bipedHeadwear when suppressed for 3D rendering
@@ -318,7 +315,7 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
         float netHeadYaw, float headPitch, float scaleFactor, CallbackInfo ci) {
         if (!this.wawelauth$modernEnabled || !SkinLayers3DConfig.modernSkinSupport) return;
 
-        SkinLayers3DState state3d = this.wawelauth$skinLayers3D;
+        SkinLayers3DState state3d = SkinLayers3DSetup.getState(wawelauth$currentRenderingPlayerUuid);
         this.wawelauth$savedHeadwearShowModel = this.bipedHeadwear.showModel;
         if (SkinLayers3DConfig.enabled && state3d != null
             && state3d.initialized
@@ -368,7 +365,7 @@ public abstract class MixinModelBiped extends ModelBase implements IModelBipedMo
 
     @Unique
     private void wawelauth$renderAllOverlays(float scaleFactor) {
-        SkinLayers3DState state3d = this.wawelauth$skinLayers3D;
+        SkinLayers3DState state3d = SkinLayers3DSetup.getState(wawelauth$currentRenderingPlayerUuid);
         if (SkinLayers3DConfig.enabled && state3d != null && state3d.initialized) {
             GL11.glEnable(GL11.GL_BLEND);
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);

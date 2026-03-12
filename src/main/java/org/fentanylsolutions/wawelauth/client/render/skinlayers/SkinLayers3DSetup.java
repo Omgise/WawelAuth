@@ -29,7 +29,45 @@ import com.mojang.authlib.GameProfile;
 public class SkinLayers3DSetup {
 
     /** Cache for skull meshes keyed by GameProfile. */
-    public static final Map<UUID, SkullMeshCache> skullCache = new ConcurrentHashMap<>();
+    private static final Map<UUID, SkullMeshCache> skullCache = new ConcurrentHashMap<>();
+
+    public static void clearSkullCache() {
+        skullCache.values()
+            .forEach(cached -> { if (cached.mesh != null) cached.mesh.cleanup(); });
+        skullCache.clear();
+    }
+
+    public static void updateSkullCache(UUID uuid, SkullMeshCache newCache) {
+        SkullMeshCache oldCache = (newCache == null) ? skullCache.remove(uuid) : skullCache.put(uuid, newCache);
+        if (oldCache != null && oldCache.mesh != null && oldCache != newCache) {
+            oldCache.mesh.cleanup();
+        }
+    }
+
+    public static SkullMeshCache getSkullCache(UUID uuid) {
+        return skullCache.get(uuid);
+    }
+
+    /** Cache for player 3d state keyed by GameProfile. */
+    private static final Map<UUID, SkinLayers3DState> skinLayersStateCache = new ConcurrentHashMap<>();
+
+    public static void clearState() {
+        skinLayersStateCache.values()
+            .forEach(state -> { if (state != null) state.cleanup(); });
+        skinLayersStateCache.clear();
+    }
+
+    public static void updateState(UUID uuid, SkinLayers3DState newState) {
+        SkinLayers3DState oldState = (newState == null) ? skinLayersStateCache.remove(uuid)
+            : skinLayersStateCache.put(uuid, newState);
+        if (oldState != null && oldState != newState) {
+            oldState.cleanup();
+        }
+    }
+
+    public static SkinLayers3DState getState(UUID uuid) {
+        return skinLayersStateCache.get(uuid);
+    }
 
     /**
      * Create or update 3D skin layer meshes for a player.
@@ -130,7 +168,7 @@ public class SkinLayers3DSetup {
     public static SkinLayers3DMesh getOrCreateSkullMesh(GameProfile profile, ResourceLocation skinLocation) {
         if (profile == null || skinLocation == null) return null;
 
-        SkullMeshCache cached = skullCache.get(profile.getId());
+        SkullMeshCache cached = getSkullCache(profile.getId());
         if (cached != null) {
             if (skinLocation.equals(cached.skinLocation)) {
                 return cached.mesh;
@@ -149,7 +187,7 @@ public class SkinLayers3DSetup {
         try {
             SkinLayers3DSkinData skinData = new SkinLayers3DSkinData(skinImage);
             SkinLayers3DMesh mesh = buildMesh(skinData, 8, 8, 8, 32, 0, false, 0.6f);
-            skullCache.put(profile.getId(), new SkullMeshCache(skinLocation, mesh));
+            updateSkullCache(profile.getId(), new SkullMeshCache(skinLocation, mesh));
             return mesh;
         } catch (Exception e) {
             WawelAuth.LOG.error("Failed to build 3D skull hat mesh", e);

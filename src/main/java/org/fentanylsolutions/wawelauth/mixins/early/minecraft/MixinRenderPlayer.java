@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 
+import java.util.UUID;
+
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.model.ModelBiped;
 import net.minecraft.client.renderer.entity.RenderPlayer;
@@ -49,9 +51,12 @@ public class MixinRenderPlayer {
     private void wawelauth$setSlimPerPlayer(AbstractClientPlayer player, double x, double y, double z, float yaw,
         float partialTicks, CallbackInfo ci) {
         IModelBipedModernExt ext = (IModelBipedModernExt) this.modelBipedMain;
+        UUID uuid = player.getUniqueID();
+        ext.wawelauth$setCurrentPlayerUuid(uuid);
+
         if (!SkinLayers3DConfig.modernSkinSupport) {
             ext.wawelauth$setSlim(false);
-            ext.wawelauth$setSkinLayers3D(null);
+            SkinLayers3DSetup.updateState(uuid, null);
             return;
         }
         if (!ext.wawelauth$isModern()) {
@@ -63,7 +68,7 @@ public class MixinRenderPlayer {
         ext.wawelauth$setSlim(slim);
 
         if (!SkinLayers3DConfig.enabled) {
-            ext.wawelauth$setSkinLayers3D(null);
+            SkinLayers3DSetup.updateState(uuid, null);
             return;
         }
 
@@ -71,13 +76,12 @@ public class MixinRenderPlayer {
         double distSq = x * x + y * y + z * z;
         int lodDist = SkinLayers3DConfig.renderDistanceLOD;
         if (distSq < (double) lodDist * lodDist) {
-            // Within LOD range: set up or reuse 3D meshes
-            SkinLayers3DState existing = ext.wawelauth$getSkinLayers3D();
+            SkinLayers3DState existing = SkinLayers3DSetup.getState(uuid);
             SkinLayers3DState state = SkinLayers3DSetup.createOrUpdate(player, existing, slim);
-            ext.wawelauth$setSkinLayers3D(state);
+            SkinLayers3DSetup.updateState(uuid, state);
         } else {
             // Beyond LOD range: fall back to 2D overlays
-            ext.wawelauth$setSkinLayers3D(null);
+            SkinLayers3DSetup.updateState(uuid, null);
         }
     }
 
@@ -87,28 +91,31 @@ public class MixinRenderPlayer {
     @Inject(method = "renderFirstPersonArm", at = @At("HEAD"))
     private void wawelauth$setSlimFirstPersonArm(EntityPlayer player, CallbackInfo ci) {
         IModelBipedModernExt ext = (IModelBipedModernExt) this.modelBipedMain;
+        UUID uuid = player.getUniqueID();
+        ext.wawelauth$setCurrentPlayerUuid(uuid);
+
         if (!SkinLayers3DConfig.modernSkinSupport) {
             ext.wawelauth$setSlim(false);
-            ext.wawelauth$setSkinLayers3D(null);
+            SkinLayers3DSetup.updateState(uuid, null);
             return;
         }
         if (!ext.wawelauth$isModern()) {
             ext.wawelauth$initModern();
         }
         if (player instanceof AbstractClientPlayer clientPlayer) {
-			SkinModel model = SkinModelHelper.getSkinModel(clientPlayer);
+            SkinModel model = SkinModelHelper.getSkinModel(clientPlayer);
             boolean slim = model == SkinModel.SLIM;
             ext.wawelauth$setSlim(slim);
 
             if (SkinLayers3DConfig.enabled) {
-                SkinLayers3DState existing = ext.wawelauth$getSkinLayers3D();
+                SkinLayers3DState existing = SkinLayers3DSetup.getState(uuid);
                 SkinLayers3DState state = SkinLayers3DSetup.createOrUpdate(clientPlayer, existing, slim);
-                ext.wawelauth$setSkinLayers3D(state);
+                SkinLayers3DSetup.updateState(uuid, state);
             } else {
-                ext.wawelauth$setSkinLayers3D(null);
+                SkinLayers3DSetup.updateState(uuid, null);
             }
         } else {
-            ext.wawelauth$setSkinLayers3D(null);
+            SkinLayers3DSetup.updateState(uuid, null);
         }
     }
 

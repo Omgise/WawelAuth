@@ -169,8 +169,8 @@ public class VoxelSurfaceBuilder {
             staticOffset.z + voxelPosition.z);
         boolean solidPixel = textureData.isSolid(onTextureUV);
 
-        Set<Direction> hide = new HashSet<Direction>();
-        Set<Direction[]> corners = new HashSet<Direction[]>();
+        Set<Direction> hide = new HashSet<>();
+        Set<Direction[]> corners = new HashSet<>();
 
         boolean onBorder = false;
         boolean backsideOverlaps = false;

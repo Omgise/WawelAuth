@@ -2,6 +2,7 @@ package org.fentanylsolutions.wawelauth.client.gui;
 
 import java.util.UUID;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
@@ -64,7 +65,11 @@ public final class SkinResolverClientHandler {
 
         client.getSkinResolver()
             .invalidate(playerID);
-        SkinLayers3DSetup.skullCache.remove(playerID);
+        Minecraft.getMinecraft()
+            .func_152344_a(() -> {
+                SkinLayers3DSetup.updateSkullCache(playerID, null);
+                SkinLayers3DSetup.updateState(playerID, null);
+            });
     }
 
     @SubscribeEvent
@@ -74,7 +79,11 @@ public final class SkinResolverClientHandler {
 
         client.getSkinResolver()
             .invalidateAll();
-        SkinLayers3DSetup.skullCache.clear();
+        Minecraft.getMinecraft()
+            .func_152344_a(() -> {
+                SkinLayers3DSetup.clearSkullCache();
+                SkinLayers3DSetup.clearState();
+            });
     }
 
 }

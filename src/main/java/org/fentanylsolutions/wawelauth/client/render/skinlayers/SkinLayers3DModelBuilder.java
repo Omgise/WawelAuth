@@ -15,7 +15,7 @@ import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelCube
  */
 public class SkinLayers3DModelBuilder implements VoxelBuilder {
 
-    private final List<VoxelCube> cubes = new ArrayList<VoxelCube>();
+    private final List<VoxelCube> cubes = new ArrayList<>();
     private int u;
     private int v;
     private boolean mirror;

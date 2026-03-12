@@ -1,8 +1,8 @@
 package org.fentanylsolutions.wawelauth.client.render;
 
-import net.minecraft.client.model.ModelRenderer;
+import java.util.UUID;
 
-import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DState;
+import net.minecraft.client.model.ModelRenderer;
 
 /**
  * Duck interface injected into {@link net.minecraft.client.model.ModelBiped} via mixin.
@@ -37,16 +37,7 @@ public interface IModelBipedModernExt {
      */
     void wawelauth$renderRightArmWear(float scale);
 
-    /**
-     * Set 3D skin layer state for the current render pass.
-     * When non-null, overlay rendering uses 3D meshes instead of flat ModelRenderers.
-     */
-    void wawelauth$setSkinLayers3D(SkinLayers3DState state);
-
-    /**
-     * Get the current 3D skin layer state, or null if 3D layers are inactive.
-     */
-    SkinLayers3DState wawelauth$getSkinLayers3D();
+    void wawelauth$setCurrentPlayerUuid(UUID uuid);
 
     ModelRenderer wawelAuth$getBodyWear();
 

@@ -57,7 +57,7 @@ public class VoxelCube {
         Vertex ppp = new Vertex(pX, pY, pZ, 8.0F, 8.0F);
         Vertex npp = new Vertex(x, pY, pZ, 8.0F, 0.0F);
 
-        Map<Direction.Axis, Direction[]> axisToCorner = new HashMap<Direction.Axis, Direction[]>();
+        Map<Direction.Axis, Direction[]> axisToCorner = new HashMap<>();
         if (hideCorners != null) {
             nextCorner: for (Direction[] corner : hideCorners) {
                 if (corner == null || corner.length == 0) {

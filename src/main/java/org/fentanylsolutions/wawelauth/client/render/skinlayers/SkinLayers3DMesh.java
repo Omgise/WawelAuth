@@ -3,6 +3,7 @@ package org.fentanylsolutions.wawelauth.client.render.skinlayers;
 import java.util.List;
 
 import net.minecraft.client.renderer.Tessellator;
+
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelCube;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelModelPart;
 import org.lwjgl.opengl.GL11;
@@ -36,12 +37,11 @@ public class SkinLayers3DMesh extends VoxelModelPart {
             for (int v = 0; v < 4; v++) {
                 int base = id + 3 + (v * 5);
                 tess.addVertexWithUV(
-                        polygonData[base],
-                        polygonData[base + 1],
-                        polygonData[base + 2],
-                        polygonData[base + 3],
-                        polygonData[base + 4]
-                );
+                    polygonData[base],
+                    polygonData[base + 1],
+                    polygonData[base + 2],
+                    polygonData[base + 3],
+                    polygonData[base + 4]);
             }
         }
         tess.draw();
