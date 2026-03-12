@@ -79,6 +79,10 @@ public class Mixins extends FentMixins {
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)
             .build();
+        registry.mixin("MixinMinecraftSingleplayerAccount")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
         registry.mixin("MixinNetHandlerLoginClient")
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)
@@ -98,6 +102,10 @@ public class Mixins extends FentMixins {
             .side(MiscUtil.Side.CLIENT)
             .build();
         registry.mixin("MixinGuiMultiplayer")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
+        registry.mixin("MixinGuiSelectWorld")
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)
             .build();

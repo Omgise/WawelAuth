@@ -14,33 +14,52 @@ import cpw.mods.fml.relauncher.SideOnly;
 @SideOnly(Side.CLIENT)
 public class AuthButton extends GuiButton {
 
-    private static final String LABEL_KEY = "wawelauth.gui.multiplayer.auth";
+    private static final String DEFAULT_LABEL_KEY = "wawelauth.gui.multiplayer.auth";
+    private static final String DEFAULT_FALLBACK_KEY = "wawelauth.gui.multiplayer.auth_fallback";
     private static final ResourceLocation ICON_TEXTURE = new ResourceLocation(
         "wawelauth",
         "textures/gui/logo_2_outline.png");
     private static final int ICON_SIZE = 14;
     private static final int ICON_TEXT_GAP = 4;
     private static final int HORIZONTAL_PADDING = 6;
+    private final String labelKey;
+    private final String fallbackKey;
 
     public AuthButton(int id, int x, int y, int height) {
-        super(id, x, y, preferredWidth(Minecraft.getMinecraft().fontRenderer), height, translatedLabel());
+        this(id, x, y, height, DEFAULT_LABEL_KEY, DEFAULT_FALLBACK_KEY);
+    }
+
+    public AuthButton(int id, int x, int y, int height, String labelKey, String fallbackKey) {
+        super(
+            id,
+            x,
+            y,
+            preferredWidth(Minecraft.getMinecraft().fontRenderer, labelKey, fallbackKey),
+            height,
+            translatedLabel(labelKey, fallbackKey));
+        this.labelKey = labelKey;
+        this.fallbackKey = fallbackKey;
     }
 
     public static int preferredWidth(FontRenderer fontRenderer) {
-        String text = translatedLabel();
+        return preferredWidth(fontRenderer, DEFAULT_LABEL_KEY, DEFAULT_FALLBACK_KEY);
+    }
+
+    public static int preferredWidth(FontRenderer fontRenderer, String labelKey, String fallbackKey) {
+        String text = translatedLabel(labelKey, fallbackKey);
         int textWidth = fontRenderer != null ? fontRenderer.getStringWidth(text) : text.length() * 6;
         return HORIZONTAL_PADDING + ICON_SIZE + ICON_TEXT_GAP + textWidth + HORIZONTAL_PADDING;
     }
 
-    private static String translatedLabel() {
-        String translated = GuiText.tr(LABEL_KEY);
+    private static String translatedLabel(String labelKey, String fallbackKey) {
+        String translated = GuiText.tr(labelKey);
         return translated != null && !translated.trim()
-            .isEmpty() ? translated : GuiText.tr("wawelauth.gui.multiplayer.auth_fallback");
+            .isEmpty() ? translated : GuiText.tr(fallbackKey);
     }
 
     @Override
     public void drawButton(Minecraft minecraft, int mouseX, int mouseY) {
-        String text = this.displayString;
+        String text = translatedLabel(this.labelKey, this.fallbackKey);
         this.displayString = "";
         super.drawButton(minecraft, mouseX, mouseY);
         this.displayString = text;

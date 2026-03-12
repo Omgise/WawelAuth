@@ -76,6 +76,9 @@ public class WawelClient {
         if (prunedBindings > 0) {
             WawelAuth.LOG.info("Cleared {} stale per-server account bindings on startup", prunedBindings);
         }
+        if (SingleplayerAccountPersistence.clearMissingSelection(accountManager)) {
+            WawelAuth.LOG.info("Cleared stale singleplayer account selection on startup");
+        }
 
         WawelAuth.LOG.info(
             "WawelAuth client module started. {} accounts across {} providers.",

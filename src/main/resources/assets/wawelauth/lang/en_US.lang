@@ -2,6 +2,9 @@ wawelauth.configgui.title=Wawel Auth
 wawelauth.gui.multiplayer.auth=Auth
 wawelauth.gui.multiplayer.auth_fallback=Auth
 wawelauth.gui.multiplayer.open_folder=Open Wawel Auth folder
+wawelauth.gui.singleplayer.account=Account
+wawelauth.gui.singleplayer.account_fallback=Account
+wawelauth.gui.singleplayer_picker.title=Select Singleplayer Account
 
 wawelauth.gui.common.account=account
 wawelauth.gui.common.api_root=API Root: %s

@@ -4,12 +4,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Consumer;
 
 import net.minecraft.client.multiplayer.ServerData;
 
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
+import org.fentanylsolutions.wawelauth.wawelclient.SingleplayerAccountPersistence;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.data.AccountStatus;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientAccount;
@@ -43,8 +45,10 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
      */
     private static ServerData pendingServerData;
     private static String pendingStatusMessage;
+    private static boolean pendingSingleplayerMode;
 
     private final ServerData serverData;
+    private final boolean singleplayerMode;
 
     public static void open(ServerData serverData) {
         open(serverData, null);
@@ -53,6 +57,14 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
     public static void open(ServerData serverData, String statusMessage) {
         pendingServerData = serverData;
         pendingStatusMessage = statusMessage;
+        pendingSingleplayerMode = false;
+        ClientGUI.open(new ServerAccountPickerScreen());
+    }
+
+    public static void openSingleplayer() {
+        pendingServerData = null;
+        pendingStatusMessage = null;
+        pendingSingleplayerMode = true;
         ClientGUI.open(new ServerAccountPickerScreen());
     }
 
@@ -60,13 +72,16 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
         super("wawelauth");
         openParentOnClose(true);
         this.serverData = pendingServerData;
+        this.singleplayerMode = pendingSingleplayerMode;
         pendingServerData = null;
+        pendingSingleplayerMode = false;
     }
 
     @Override
     public ModularPanel buildUI(ModularGuiContext context) {
+        boolean singleplayerMode = pendingSingleplayerMode || this.singleplayerMode;
         ServerData targetServerData = pendingServerData != null ? pendingServerData : serverData;
-        if (targetServerData == null) {
+        if (targetServerData == null && !singleplayerMode) {
             return ModularPanel.defaultPanel("wawelauth_server_picker", 200, 80)
                 .child(
                     new Column().widthRel(1.0f)
@@ -77,35 +92,59 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
                                 .height(14)));
         }
 
-        IServerDataExt ext = (IServerDataExt) targetServerData;
-        String serverName = targetServerData.serverName != null ? targetServerData.serverName
-            : GuiText.tr("wawelauth.gui.common.server");
-        String statusMessage = pendingStatusMessage;
+        ModularPanel panel = ModularPanel.defaultPanel("wawelauth_server_picker", 200, 226);
+        WawelClient client = WawelClient.instance();
+
+        IServerDataExt ext = null;
+        String title;
+        String statusMessage = singleplayerMode ? null : pendingStatusMessage;
+        ServerCapabilities localAuthCapabilities = null;
+        boolean wawelAuthServer = false;
+        boolean localAuthAvailable = false;
+        String[] trustedLocalProviderName = { null };
+        long selectedAccountId;
+
+        if (singleplayerMode) {
+            title = GuiText.tr("wawelauth.gui.singleplayer_picker.title");
+            if (client != null) {
+                SingleplayerAccountPersistence.clearMissingSelection(client.getAccountManager());
+            }
+            selectedAccountId = SingleplayerAccountPersistence.getSelectedAccountId();
+        } else {
+            ext = (IServerDataExt) targetServerData;
+            String serverName = targetServerData.serverName != null ? targetServerData.serverName
+                : GuiText.tr("wawelauth.gui.common.server");
+            title = GuiText.tr("wawelauth.gui.server_picker.title", serverName);
+
+            ServerCapabilities capabilities = ext.getWawelCapabilities();
+            localAuthCapabilities = ServerBindingPersistence.getEffectiveLocalAuthCapabilities(targetServerData);
+            wawelAuthServer = capabilities != null && capabilities.isWawelAuthAdvertised();
+            localAuthAvailable = localAuthCapabilities != null && localAuthCapabilities.isLocalAuthSupported()
+                && notBlank(localAuthCapabilities.getLocalAuthApiRoot())
+                && notBlank(localAuthCapabilities.getLocalAuthPublicKeyFingerprint());
+            selectedAccountId = ext.getWawelAccountId();
+        }
         pendingStatusMessage = null;
 
-        ModularPanel panel = ModularPanel.defaultPanel("wawelauth_server_picker", 200, 226);
-
-        ServerCapabilities capabilities = ext.getWawelCapabilities();
-        ServerCapabilities localAuthCapabilities = ServerBindingPersistence
-            .getEffectiveLocalAuthCapabilities(targetServerData);
-        boolean wawelAuthServer = capabilities != null && capabilities.isWawelAuthAdvertised();
-        boolean localAuthAvailable = localAuthCapabilities != null && localAuthCapabilities.isLocalAuthSupported()
-            && notBlank(localAuthCapabilities.getLocalAuthApiRoot())
-            && notBlank(localAuthCapabilities.getLocalAuthPublicKeyFingerprint());
-        String[] trustedLocalProviderName = { null };
+        final ServerData serverDataRef = targetServerData;
+        final IServerDataExt serverExt = ext;
+        final ServerCapabilities localAuthCapabilitiesRef = localAuthCapabilities;
 
         LoginDialog loginDialog = LoginDialog.attach(panel, account -> {
             if (account == null) return;
             trustedLocalProviderName[0] = account.getProviderName();
-            ext.setWawelAccountId(account.getId());
-            ext.setWawelProviderName(account.getProviderName());
-            ServerBindingPersistence.markServerBindingOrigin(targetServerData);
-            ServerBindingPersistence.persistServerSelection(targetServerData);
+            if (serverExt == null || serverDataRef == null) {
+                return;
+            }
+            serverExt.setWawelAccountId(account.getId());
+            serverExt.setWawelProviderName(account.getProviderName());
+            ServerBindingPersistence.markServerBindingOrigin(serverDataRef);
+            ServerBindingPersistence.persistServerSelection(serverDataRef);
             String successMessage = GuiText.tr(
                 "wawelauth.gui.server_picker.status.bound",
                 account.getProfileName() != null ? account.getProfileName() : "?");
             GuiTransitionScheduler
-                .transition(panel, () -> ServerAccountPickerScreen.open(targetServerData, successMessage));
+                .transition(panel, () -> ServerAccountPickerScreen.open(serverDataRef, successMessage));
         });
         RegisterDialog registerDialog = RegisterDialog.attach(panel, success -> {
             if (Boolean.TRUE.equals(success) && trustedLocalProviderName[0] != null) {
@@ -117,8 +156,10 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
         accountList.widthRel(1.0f)
             .expanded();
 
-        WawelClient client = WawelClient.instance();
         if (client != null) {
+            if (singleplayerMode) {
+                accountList.child(buildSingleplayerClearEntry(selectedAccountId, panel));
+            }
             List<ClientAccount> allAccounts = new ArrayList<>(
                 client.getAccountManager()
                     .listAccounts());
@@ -130,7 +171,24 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
                         String.CASE_INSENSITIVE_ORDER)
                     .thenComparingLong(ClientAccount::getId));
             for (ClientAccount account : allAccounts) {
-                accountList.child(buildAccountEntry(account, targetServerData, ext, panel));
+                if (singleplayerMode) {
+                    accountList.child(
+                        buildAccountEntry(
+                            account,
+                            selectedAccountId,
+                            panel,
+                            selected -> SingleplayerAccountPersistence.setSelectedAccountId(selected.getId())));
+                } else {
+                    accountList.child(buildAccountEntry(account, selectedAccountId, panel, selected -> {
+                        if (serverExt == null || serverDataRef == null) {
+                            return;
+                        }
+                        serverExt.setWawelAccountId(selected.getId());
+                        serverExt.setWawelProviderName(selected.getProviderName());
+                        ServerBindingPersistence.markServerBindingOrigin(serverDataRef);
+                        ServerBindingPersistence.persistServerSelection(serverDataRef);
+                    }));
+                }
             }
         }
 
@@ -152,7 +210,7 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
             .heightRel(1.0f)
             .padding(6);
         content.child(
-            new TextWidget<>(GuiText.key("wawelauth.gui.server_picker.title", serverName)).widthRel(1.0f)
+            new TextWidget<>(IKey.str(title)).widthRel(1.0f)
                 .height(14));
         content.child(accountList);
         if (statusMessage != null && !statusMessage.isEmpty()) {
@@ -184,7 +242,7 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
             loginLocalBtn.onMousePressed(mouseButton -> {
                 openLocalAuthAction(
                     targetServerData,
-                    localAuthCapabilities,
+                    localAuthCapabilitiesRef,
                     panel,
                     trustedLocalProviderName,
                     loginDialog,
@@ -202,7 +260,7 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
             registerLocalBtn.onMousePressed(mouseButton -> {
                 openLocalAuthAction(
                     targetServerData,
-                    localAuthCapabilities,
+                    localAuthCapabilitiesRef,
                     panel,
                     trustedLocalProviderName,
                     loginDialog,
@@ -252,13 +310,13 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
         }
     }
 
-    private ButtonWidget<?> buildAccountEntry(ClientAccount account, ServerData targetServerData, IServerDataExt ext,
-        ModularPanel panel) {
+    private ButtonWidget<?> buildAccountEntry(ClientAccount account, long selectedAccountId, ModularPanel panel,
+        Consumer<ClientAccount> onSelect) {
         AccountStatus status = getLiveStatus(account);
         int statusColor = StatusColors.getColor(status);
         String profileName = account.getProfileName() != null ? account.getProfileName() : "?";
         String providerName = ProviderDisplayName.displayName(account.getProviderName());
-        boolean isSelected = ext.getWawelAccountId() == account.getId();
+        boolean isSelected = selectedAccountId == account.getId();
 
         ButtonWidget<?> entry = new ButtonWidget<>();
         entry.widthRel(1.0f)
@@ -298,14 +356,41 @@ public class ServerAccountPickerScreen extends ParentAwareModularScreen {
 
         entry.child(row);
         entry.onMousePressed(mouseButton -> {
-            ext.setWawelAccountId(account.getId());
-            ext.setWawelProviderName(account.getProviderName());
-            ServerBindingPersistence.markServerBindingOrigin(targetServerData);
-            ServerBindingPersistence.persistServerSelection(targetServerData);
+            onSelect.accept(account);
             panel.closeIfOpen();
             return true;
         });
 
+        return entry;
+    }
+
+    private ButtonWidget<?> buildSingleplayerClearEntry(long selectedAccountId, ModularPanel panel) {
+        boolean isSelected = selectedAccountId < 0L;
+
+        ButtonWidget<?> entry = new ButtonWidget<>();
+        entry.widthRel(1.0f)
+            .height(16);
+        if (isSelected) {
+            entry.background(new Rectangle().color(0x44FFFFFF));
+        }
+
+        TextWidget<?> label = new TextWidget<>(GuiText.key("wawelauth.gui.common.no_account_selected"));
+        label.widthRel(1.0f)
+            .heightRel(1.0f)
+            .margin(2, 0, 0, 0);
+
+        Row row = new Row();
+        row.widthRel(1.0f)
+            .heightRel(1.0f)
+            .child(new Widget<>().size(2, 16))
+            .child(label);
+
+        entry.child(row);
+        entry.onMousePressed(mouseButton -> {
+            SingleplayerAccountPersistence.clearSelection();
+            panel.closeIfOpen();
+            return true;
+        });
         return entry;
     }
 
