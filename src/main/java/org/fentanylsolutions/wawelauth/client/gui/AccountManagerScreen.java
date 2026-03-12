@@ -588,6 +588,22 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     new ButtonWidget<>().widthRel(1.0f)
                         .height(16)
                         .margin(0, 2)
+                        .setEnabledIf(widget -> hasFocusedLocalMetadata()),
+                    104,
+                    "wawelauth.gui.account_manager.proxy_settings")
+                    .onMousePressed(mouseButton -> {
+                        ensureFocusedLocalProvider(() -> {
+                            if (selectedProvider != null) {
+                                openProviderProxyDialog(selectedProvider);
+                            }
+                        });
+                        return true;
+                    }))
+            .child(
+                GuiText.fitButtonLabelMaxWidth(
+                    new ButtonWidget<>().widthRel(1.0f)
+                        .height(16)
+                        .margin(0, 2)
                         .setEnabledIf(widget -> selectedProvider != null),
                     104,
                     "wawelauth.gui.local_auth.remove_auth")
