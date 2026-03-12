@@ -253,7 +253,9 @@ public class MixinServerListEntryNormal {
                 }
             } else {
                 authDisplayName = providerName;
-                authApiRoot = selectedProvider != null ? normalizeTooltipValue(selectedProvider.getApiRoot()) : null;
+                authApiRoot = selectedProvider != null && !ProviderDisplayName.isOfflineProvider(rawProviderName)
+                    ? normalizeTooltipValue(selectedProvider.getApiRoot())
+                    : null;
             }
 
             List<String> availableProviders = collectAvailableProviderHosts(caps);
@@ -268,6 +270,7 @@ public class MixinServerListEntryNormal {
                 && authApiRoot == null
                 && !notBlank(rawProviderName);
             boolean microsoftProvider = !localAuthAvailable && ProviderDisplayName.isMicrosoftProvider(rawProviderName);
+            boolean offlineProvider = !localAuthAvailable && ProviderDisplayName.isOfflineProvider(rawProviderName);
             boolean serverAuthUnknown = !localAuthAvailable
                 && (noPingData || (caps != null && !caps.isWawelAuthAdvertised()));
 
@@ -283,7 +286,7 @@ public class MixinServerListEntryNormal {
                             + EnumChatFormatting.GOLD
                             + authDisplayName);
                 }
-                if (authApiRoot != null && !microsoftProvider) {
+                if (authApiRoot != null && !microsoftProvider && !offlineProvider) {
                     authLines.add(
                         EnumChatFormatting.GRAY + GuiText.tr("wawelauth.gui.common.api_root_label")
                             + EnumChatFormatting.GOLD
@@ -503,6 +506,8 @@ public class MixinServerListEntryNormal {
                 return EnumChatFormatting.GREEN;
             case UNVERIFIED:
                 return EnumChatFormatting.YELLOW;
+            case UNAUTHED:
+                return EnumChatFormatting.GRAY;
             case EXPIRED:
                 return EnumChatFormatting.RED;
             default:

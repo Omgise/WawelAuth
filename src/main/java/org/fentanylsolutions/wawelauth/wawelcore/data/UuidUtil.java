@@ -1,5 +1,6 @@
 package org.fentanylsolutions.wawelauth.wawelcore.data;
 
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
 /**
@@ -43,5 +44,15 @@ public final class UuidUtil {
             + "-"
             + unsigned.substring(20);
         return UUID.fromString(dashed);
+    }
+
+    /**
+     * Compute the vanilla offline-mode UUID for a player name.
+     */
+    public static UUID offlinePlayerUuid(String playerName) {
+        if (playerName == null) {
+            throw new IllegalArgumentException("playerName must not be null");
+        }
+        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
     }
 }

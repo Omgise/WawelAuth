@@ -22,12 +22,14 @@ import com.google.gson.JsonObject;
  */
 public class ProviderRegistry {
 
-    private static final String MOJANG_NAME = "Mojang";
     private static final String MOJANG_API_ROOT = "https://authserver.mojang.com";
     private static final String MOJANG_AUTH_URL = "https://authserver.mojang.com";
     private static final String MOJANG_SESSION_URL = "https://sessionserver.mojang.com";
     private static final String MOJANG_SERVICES_URL = "https://api.minecraftservices.com";
     private static final String MOJANG_SKIN_DOMAINS = "[\"textures.minecraft.net\"]";
+    private static final String OFFLINE_API_ROOT = "offline://account";
+    private static final String OFFLINE_AUTH_URL = OFFLINE_API_ROOT + "/authserver";
+    private static final String OFFLINE_SESSION_URL = OFFLINE_API_ROOT + "/sessionserver";
 
     private final ClientProviderDAO providerDAO;
     private final YggdrasilHttpClient httpClient;
@@ -42,9 +44,9 @@ public class ProviderRegistry {
      * Called once during WawelClient startup.
      */
     public void ensureBuiltinProviders() {
-        if (providerDAO.findByName(MOJANG_NAME) == null) {
+        if (providerDAO.findByName(BuiltinProviders.MOJANG_PROVIDER_NAME) == null) {
             ClientProvider mojang = new ClientProvider();
-            mojang.setName(MOJANG_NAME);
+            mojang.setName(BuiltinProviders.MOJANG_PROVIDER_NAME);
             mojang.setType(ProviderType.BUILTIN);
             mojang.setApiRoot(MOJANG_API_ROOT);
             mojang.setAuthServerUrl(MOJANG_AUTH_URL);
@@ -55,6 +57,19 @@ public class ProviderRegistry {
             mojang.setManualEntry(true);
             providerDAO.create(mojang);
             WawelAuth.LOG.info("Created built-in Mojang provider");
+        }
+        if (providerDAO.findByName(BuiltinProviders.OFFLINE_PROVIDER_NAME) == null) {
+            ClientProvider offline = new ClientProvider();
+            offline.setName(BuiltinProviders.OFFLINE_PROVIDER_NAME);
+            offline.setType(ProviderType.BUILTIN);
+            offline.setApiRoot(OFFLINE_API_ROOT);
+            offline.setAuthServerUrl(OFFLINE_AUTH_URL);
+            offline.setSessionServerUrl(OFFLINE_SESSION_URL);
+            offline.setServicesUrl(OFFLINE_API_ROOT);
+            offline.setCreatedAt(System.currentTimeMillis());
+            offline.setManualEntry(true);
+            providerDAO.create(offline);
+            WawelAuth.LOG.info("Created built-in offline account provider");
         }
     }
 

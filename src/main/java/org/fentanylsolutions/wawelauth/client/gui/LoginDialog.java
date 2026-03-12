@@ -39,6 +39,7 @@ public final class LoginDialog {
             String provider = this.providerName != null ? this.providerName : "";
             String providerLabel = ProviderDisplayName.displayName(provider);
             boolean supportsMicrosoftLogin = ProviderDisplayName.isMicrosoftProvider(provider);
+            boolean offlineAccountLogin = ProviderDisplayName.isOfflineProvider(provider);
             boolean directMicrosoftLogin = supportsMicrosoftLogin && this.forceMicrosoftLogin;
             Dialog<ClientAccount> dialog = new Dialog<>("wawelauth_login", this.onResult);
             dialog.setCloseOnOutOfBoundsClick(false);
@@ -83,13 +84,15 @@ public final class LoginDialog {
                     errorText[0] = GuiText.tr("wawelauth.gui.login.error.username_required");
                     return;
                 }
-                if (password.isEmpty()) {
+                if (!offlineAccountLogin && password.isEmpty()) {
                     errorText[0] = GuiText.tr("wawelauth.gui.login.error.password_required");
                     return;
                 }
 
                 busy[0] = true;
-                errorText[0] = GuiText.tr("wawelauth.gui.login.status.authenticating");
+                errorText[0] = GuiText.tr(
+                    offlineAccountLogin ? "wawelauth.gui.login.status.creating_offline"
+                        : "wawelauth.gui.login.status.authenticating");
 
                 WawelClient.instance()
                     .getAccountManager()
@@ -188,16 +191,26 @@ public final class LoginDialog {
                     .height(12));
 
             if (!directMicrosoftLogin) {
+                if (offlineAccountLogin) {
+                    root.child(
+                        new TextWidget<>(GuiText.key("wawelauth.gui.login.offline_notice")).color(0xFFAAAAAA)
+                            .scale(0.8f)
+                            .widthRel(1.0f)
+                            .height(20)
+                            .margin(0, 4));
+                }
                 root.child(
                     usernameField.widthRel(1.0f)
                         .height(18)
-                        .setMaxLength(64)
-                        .margin(0, 3))
-                    .child(
+                        .setMaxLength(offlineAccountLogin ? 16 : 64)
+                        .margin(0, 3));
+                if (!offlineAccountLogin) {
+                    root.child(
                         passwordField.widthRel(1.0f)
                             .height(18)
                             .setMaxLength(128)
                             .margin(0, 3));
+                }
             } else {
                 root.child(
                     new TextWidget<>(GuiText.key("wawelauth.gui.login.status.microsoft_starting")).color(0xFFAAAAAA)
@@ -214,7 +227,7 @@ public final class LoginDialog {
                 .child(new Widget<>().size(1, 4))
                 .child(buttonRow);
 
-            dialog.size(236, directMicrosoftLogin ? 112 : 150)
+            dialog.size(236, directMicrosoftLogin ? 112 : (offlineAccountLogin ? 142 : 150))
                 .child(root);
 
             if (directMicrosoftLogin) {

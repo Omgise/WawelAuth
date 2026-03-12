@@ -2292,12 +2292,18 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
 
     private boolean isSkinUploadDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
+        if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
+            return true;
+        }
         return Config.client()
             .isSkinUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }
 
     private boolean isCapeUploadDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
+        if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
+            return true;
+        }
         return Config.client()
             .isCapeUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }
@@ -2308,6 +2314,9 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
 
     private boolean isTextureResetDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
+        if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
+            return true;
+        }
         return Config.client()
             .isTextureResetDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }

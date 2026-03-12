@@ -1,6 +1,5 @@
 package org.fentanylsolutions.wawelauth.wawelcore.data;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
 
@@ -229,7 +228,7 @@ public class WawelProfile {
      * UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(UTF_8))
      */
     public static UUID computeOfflineUuid(String playerName) {
-        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8));
+        return UuidUtil.offlinePlayerUuid(playerName);
     }
 
     /** Recompute and set offlineUuid from the current name. */

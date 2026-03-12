@@ -54,7 +54,7 @@ import com.mojang.authlib.properties.Property;
  */
 public class SessionBridge {
 
-    private static final String MOJANG_PROVIDER_NAME = "Mojang";
+    private static final String MOJANG_PROVIDER_NAME = BuiltinProviders.MOJANG_PROVIDER_NAME;
     private static final String[] VANILLA_SKIN_DOMAINS = { ".minecraft.net", ".mojang.com" };
     private static final long PING_PROFILE_CONTEXT_TTL_MS = 30_000L;
     private final YggdrasilHttpClient httpClient;
@@ -144,6 +144,7 @@ public class SessionBridge {
         }
 
         String token = accountManager.getUsableAccessToken(account);
+        boolean offlineAccount = BuiltinProviders.isOfflineProvider(provider.getName());
 
         // Build new session
         Session newSession = new Session(
@@ -151,7 +152,7 @@ public class SessionBridge {
             account.getProfileUuid()
                 .toString(),
             token,
-            "mojang");
+            offlineAccount ? "legacy" : "mojang");
 
         // Swap session
         ((AccessorMinecraft) Minecraft.getMinecraft()).wawelauth$setSession(newSession);
@@ -220,6 +221,9 @@ public class SessionBridge {
         if (provider == null) {
             return new LookupContext(null, null, Collections.emptyList(), allowVanillaFallback);
         }
+        if (isOfflineProvider(provider)) {
+            return new LookupContext(null, null, Collections.emptyList(), false);
+        }
         return new LookupContext(null, provider, Collections.singletonList(provider), allowVanillaFallback);
     }
 
@@ -287,19 +291,19 @@ public class SessionBridge {
         if (profileId == null) return false;
 
         if (context != null) {
-            return context.sessionBase != null || context.provider != null
-                || (context.trustedProviders != null && !context.trustedProviders.isEmpty());
+            return context.sessionBase != null || isUsableProfileProvider(context.provider)
+                || hasUsableProfileProvider(context.trustedProviders);
         }
 
         if (Minecraft.getMinecraft().theWorld != null) {
-            return connectedSessionServerBase != null || activeProvider != null;
+            return connectedSessionServerBase != null || isUsableProfileProvider(activeProvider);
         }
 
         if (resolvePingProfileContext(profileId) != null) {
             return true;
         }
 
-        return resolveProviderForProfile(profileId) != null;
+        return isUsableProfileProvider(resolveProviderForProfile(profileId));
     }
 
     boolean hasFreshPingProfileContext(UUID profileId, long nowMs) {
@@ -452,6 +456,11 @@ public class SessionBridge {
         ClientProvider provider = this.activeProvider;
         if (provider == null) {
             throw new AuthenticationException("No active WawelAuth provider");
+        }
+        if (isOfflineProvider(provider)) {
+            WawelAuth
+                .debug("Offline account selected: skipping joinServer authentication for profile " + profile.getId());
+            return;
         }
 
         JsonObject body = new JsonObject();
@@ -655,6 +664,9 @@ public class SessionBridge {
         if (provider == null) {
             return null;
         }
+        if (isOfflineProvider(provider)) {
+            return profile;
+        }
 
         return lookupProfileFromProvider(provider, profile, requireSecure);
     }
@@ -853,7 +865,7 @@ public class SessionBridge {
 
         // Before capability detection runs, keep vanilla-compatible trust so
         // normal servers and the main menu still behave like stock authlib.
-        if (!MOJANG_PROVIDER_NAME.equals(activeProvider.getName())) {
+        if (!isMojangProvider(activeProvider) && !isOfflineProvider(activeProvider)) {
             ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);
             if (mojang != null) {
                 providers.add(mojang);
@@ -872,7 +884,9 @@ public class SessionBridge {
         LinkedHashSet<String> seen = new LinkedHashSet<>();
 
         if (capabilities == null || !capabilities.isWawelAuthAdvertised()) {
-            addTrustedProvider(resolved, seen, providerDAO.findByName(MOJANG_PROVIDER_NAME));
+            if (!isOfflineProvider(activeProvider)) {
+                addTrustedProvider(resolved, seen, providerDAO.findByName(MOJANG_PROVIDER_NAME));
+            }
             addTrustedProvider(resolved, seen, activeProvider);
         }
 
@@ -1189,7 +1203,27 @@ public class SessionBridge {
     }
 
     private static boolean isMojangProvider(ClientProvider provider) {
-        return provider != null && MOJANG_PROVIDER_NAME.equals(provider.getName());
+        return provider != null && BuiltinProviders.isMojangProvider(provider.getName());
+    }
+
+    private static boolean isOfflineProvider(ClientProvider provider) {
+        return provider != null && BuiltinProviders.isOfflineProvider(provider.getName());
+    }
+
+    private static boolean isUsableProfileProvider(ClientProvider provider) {
+        return provider != null && !isOfflineProvider(provider);
+    }
+
+    private static boolean hasUsableProfileProvider(List<ClientProvider> providers) {
+        if (providers == null || providers.isEmpty()) {
+            return false;
+        }
+        for (ClientProvider provider : providers) {
+            if (isUsableProfileProvider(provider)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean containsMojangProvider(List<ClientProvider> providers) {
@@ -1295,6 +1329,9 @@ public class SessionBridge {
     }
 
     private GameProfile lookupProfileFromProvider(ClientProvider provider, GameProfile profile, boolean requireSecure) {
+        if (isOfflineProvider(provider)) {
+            return profile;
+        }
         String cacheKey = buildProfileCacheKey(provider, profile.getId(), requireSecure);
         GameProfile cached = profileCache.get(cacheKey);
         if (cached != null) {
@@ -1459,6 +1496,9 @@ public class SessionBridge {
     }
 
     private GameProfile fetchProfileFromProvider(ClientProvider provider, GameProfile profile, boolean requireSecure) {
+        if (isOfflineProvider(provider)) {
+            return profile;
+        }
         try {
             String uuid = UuidUtil.toUnsigned(profile.getId());
             String url = provider.sessionUrl("/session/minecraft/profile/" + uuid);

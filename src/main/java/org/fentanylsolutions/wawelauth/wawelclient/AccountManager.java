@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.wawelclient.data.AccountStatus;
@@ -40,7 +41,8 @@ import com.google.gson.JsonObject;
  */
 public class AccountManager {
 
-    private static final String MICROSOFT_PROVIDER_KEY = "Mojang";
+    private static final Pattern OFFLINE_ACCOUNT_NAME_PATTERN = Pattern.compile("^[A-Za-z0-9_]{1,16}$");
+    private static final String OFFLINE_ACCESS_TOKEN_PREFIX = "offline:";
     private static final long STALE_THRESHOLD_MS = 25 * 60_000; // 25 minutes
     private static final long CHECK_INTERVAL_SECONDS = 60;
     private static final long UNVERIFIED_RETRY_INTERVAL_MS = 30_000; // retry quickly after offline startup
@@ -260,7 +262,7 @@ public class AccountManager {
                 // Best-effort invalidation on the server
                 try {
                     ClientProvider provider = providerDAO.findByName(account.getProviderName());
-                    if (provider != null) {
+                    if (provider != null && !BuiltinProviders.isOfflineProvider(provider.getName())) {
                         String token = account.getAccessToken();
                         JsonObject body = new JsonObject();
                         body.addProperty("accessToken", token);
@@ -406,6 +408,10 @@ public class AccountManager {
                         continue;
                     }
 
+                    if (status == AccountStatus.UNAUTHED) {
+                        continue;
+                    }
+
                     if (status == AccountStatus.UNVERIFIED) {
                         // Keep retrying UNVERIFIED accounts on a short cadence so they
                         // recover quickly when internet comes back after startup.
@@ -440,6 +446,9 @@ public class AccountManager {
         ClientProvider provider = providerDAO.findByName(providerName);
         if (provider == null) {
             throw new IllegalArgumentException("Unknown provider: " + providerName);
+        }
+        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
+            return doAuthenticateOffline(provider, username);
         }
 
         String clientToken = UUID.randomUUID()
@@ -593,6 +602,45 @@ public class AccountManager {
         statusCache.put(account.getId(), account.getStatus());
 
         WawelAuth.LOG.info("Authenticated account '{}' on provider '{}'", profileName, providerName);
+        return account;
+    }
+
+    private ClientAccount doAuthenticateOffline(ClientProvider provider, String username) {
+        String profileName = normalizeOfflineAccountName(username);
+        UUID profileUuid = UuidUtil.offlinePlayerUuid(profileName);
+        String profileUuidUnsigned = UuidUtil.toUnsigned(profileUuid);
+        long now = System.currentTimeMillis();
+
+        ClientAccount account = new ClientAccount();
+        account.setProviderName(provider.getName());
+        account.setUserUuid(profileUuidUnsigned);
+        account.setProfileUuid(profileUuid);
+        account.setProfileName(profileName);
+        account.setAccessToken(OFFLINE_ACCESS_TOKEN_PREFIX + profileUuidUnsigned);
+        account.setRefreshToken(null);
+        account.setClientToken(null);
+        account.setUserPropertiesJson(null);
+        account.setStatus(AccountStatus.UNAUTHED);
+        account.setConsecutiveFailures(0);
+        account.setCreatedAt(now);
+        account.setLastValidatedAt(now);
+        account.setTokenIssuedAt(now);
+        account.setLastError(null);
+        account.setLastErrorAt(0L);
+        account.setLastRefreshAttemptAt(0L);
+
+        ClientAccount existing = accountDAO.findByProviderAndProfile(provider.getName(), profileUuid);
+        if (existing != null) {
+            account.setId(existing.getId());
+            account.setCreatedAt(existing.getCreatedAt());
+            accountDAO.update(account);
+        } else {
+            long id = accountDAO.create(account);
+            account.setId(id);
+        }
+        statusCache.put(account.getId(), AccountStatus.UNAUTHED);
+
+        WawelAuth.LOG.info("Created offline account '{}' with UUID {}", profileName, profileUuidUnsigned);
         return account;
     }
 
@@ -776,7 +824,7 @@ public class AccountManager {
         if (provider == null) {
             throw new IllegalArgumentException("Unknown provider: " + providerName);
         }
-        if (!MICROSOFT_PROVIDER_KEY.equals(provider.getName())) {
+        if (!BuiltinProviders.isMojangProvider(provider.getName())) {
             throw new IllegalArgumentException("Microsoft login is only supported for the Microsoft provider");
         }
 
@@ -828,6 +876,10 @@ public class AccountManager {
             WawelAuth.LOG.warn("Provider '{}' not found for account {}", account.getProviderName(), account.getId());
             markStatus(account, AccountStatus.EXPIRED, "Provider not found");
             return AccountStatus.EXPIRED;
+        }
+        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
+            markUnauthed(account);
+            return AccountStatus.UNAUTHED;
         }
 
         if (isMicrosoftManagedMojangAccount(provider, account)) {
@@ -1031,7 +1083,7 @@ public class AccountManager {
 
     private static boolean isMicrosoftManagedMojangAccount(ClientProvider provider, ClientAccount account) {
         return provider != null && account != null
-            && MICROSOFT_PROVIDER_KEY.equals(provider.getName())
+            && BuiltinProviders.isMojangProvider(provider.getName())
             && account.getRefreshToken() != null
             && !account.getRefreshToken()
                 .trim()
@@ -1060,7 +1112,10 @@ public class AccountManager {
         if (provider == null) {
             throw new IllegalArgumentException("Provider not found: " + account.getProviderName());
         }
-        if (MICROSOFT_PROVIDER_KEY.equals(provider.getName())) {
+        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
+            throw new IllegalArgumentException("Offline accounts do not support skins or capes.");
+        }
+        if (BuiltinProviders.isMojangProvider(provider.getName())) {
             return doUploadTexturesMicrosoft(account, provider, skinFile, capeFile, skinSlim);
         }
 
@@ -1149,7 +1204,10 @@ public class AccountManager {
         if (provider == null) {
             throw new IllegalArgumentException("Provider not found: " + account.getProviderName());
         }
-        if (MICROSOFT_PROVIDER_KEY.equals(provider.getName())) {
+        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
+            throw new IllegalArgumentException("Offline accounts do not support skin or cape reset.");
+        }
+        if (BuiltinProviders.isMojangProvider(provider.getName())) {
             return doDeleteTexturesMicrosoft(account, provider);
         }
 
@@ -1218,7 +1276,7 @@ public class AccountManager {
         if (provider.getType() == ProviderType.BUILTIN) {
             return false;
         }
-        if (MICROSOFT_PROVIDER_KEY.equals(provider.getName())) {
+        if (BuiltinProviders.isMojangProvider(provider.getName())) {
             return false;
         }
         return doProbeSupportsWawelRegister(provider.getName());
@@ -1304,6 +1362,28 @@ public class AccountManager {
         account.setConsecutiveFailures(account.getConsecutiveFailures() + 1);
         accountDAO.update(account);
         statusCache.put(account.getId(), AccountStatus.UNVERIFIED);
+    }
+
+    private void markUnauthed(ClientAccount account) {
+        account.setStatus(AccountStatus.UNAUTHED);
+        account.setLastError(null);
+        account.setLastErrorAt(0L);
+        account.setLastRefreshAttemptAt(0L);
+        account.setConsecutiveFailures(0);
+        accountDAO.update(account);
+        statusCache.put(account.getId(), AccountStatus.UNAUTHED);
+    }
+
+    private static String normalizeOfflineAccountName(String username) {
+        String clean = trimToNull(username);
+        if (clean == null) {
+            throw new IllegalArgumentException("Username is required.");
+        }
+        if (!OFFLINE_ACCOUNT_NAME_PATTERN.matcher(clean)
+            .matches()) {
+            throw new IllegalArgumentException("Offline account names must use 1-16 letters, digits, or underscores.");
+        }
+        return clean;
     }
 
 }

@@ -19,6 +19,8 @@ public final class StatusColors {
                 return GREEN;
             case UNVERIFIED:
                 return YELLOW;
+            case UNAUTHED:
+                return GRAY;
             case EXPIRED:
                 return RED;
             default:
@@ -35,6 +37,8 @@ public final class StatusColors {
                 return GuiText.tr("wawelauth.gui.status.refreshed");
             case UNVERIFIED:
                 return GuiText.tr("wawelauth.gui.status.unverified");
+            case UNAUTHED:
+                return GuiText.tr("wawelauth.gui.status.unauthed");
             case EXPIRED:
                 return GuiText.tr("wawelauth.gui.status.expired");
             default:
