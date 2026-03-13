@@ -20,7 +20,7 @@ import org.fentanylsolutions.wawelauth.wawelcore.storage.sqlite.SqliteDatabase;
  */
 public class ClientDatabase extends SqliteDatabase {
 
-    private static final int CURRENT_VERSION = 4;
+    private static final int CURRENT_VERSION = 6;
 
     public ClientDatabase(File dbFile) {
         super(dbFile);
@@ -52,6 +52,12 @@ public class ClientDatabase extends SqliteDatabase {
             || !hasColumn("providers", "proxy_username")
             || !hasColumn("providers", "proxy_password")) {
             migrateToV4();
+        }
+        if (version < 5 || !hasColumn("accounts", "local_skin_path") || !hasColumn("accounts", "local_skin_model")) {
+            migrateToV5();
+        }
+        if (version < 6 || !hasColumn("accounts", "local_cape_path")) {
+            migrateToV6();
         }
 
         // Future: if (version < 4) { migrateToV4(); }
@@ -104,7 +110,10 @@ public class ClientDatabase extends SqliteDatabase {
                         consecutive_failures INTEGER NOT NULL DEFAULT 0,
                         created_at INTEGER NOT NULL,
                         last_validated_at INTEGER NOT NULL,
-                        token_issued_at INTEGER NOT NULL
+                        token_issued_at INTEGER NOT NULL,
+                        local_skin_path TEXT,
+                        local_skin_model TEXT,
+                        local_cape_path TEXT
                     )""");
 
                 // Unique per profile when a profile is bound
@@ -188,6 +197,35 @@ public class ClientDatabase extends SqliteDatabase {
             });
         }
         WawelAuth.LOG.info("Client DB migrated to version 4");
+    }
+
+    private void migrateToV5() {
+        if (!hasColumn("accounts", "local_skin_path")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE accounts ADD COLUMN local_skin_path TEXT");
+                }
+            });
+        }
+        if (!hasColumn("accounts", "local_skin_model")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE accounts ADD COLUMN local_skin_model TEXT");
+                }
+            });
+        }
+        WawelAuth.LOG.info("Client DB migrated to version 5");
+    }
+
+    private void migrateToV6() {
+        if (!hasColumn("accounts", "local_cape_path")) {
+            execute(conn -> {
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("ALTER TABLE accounts ADD COLUMN local_cape_path TEXT");
+                }
+            });
+        }
+        WawelAuth.LOG.info("Client DB migrated to version 6");
     }
 
     private boolean hasColumn(String tableName, String columnName) {

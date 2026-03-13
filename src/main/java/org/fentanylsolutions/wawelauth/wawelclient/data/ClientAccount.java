@@ -2,6 +2,8 @@ package org.fentanylsolutions.wawelauth.wawelclient.data;
 
 import java.util.UUID;
 
+import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
+
 /**
  * A stored account in the client account manager.
  *
@@ -71,6 +73,15 @@ public class ClientAccount {
 
     /** Epoch millis when the token was originally issued. */
     private long tokenIssuedAt;
+
+    /** Local-only cosmetic skin path for offline accounts. */
+    private String localSkinPath;
+
+    /** Local-only cosmetic skin model for offline accounts. */
+    private SkinModel localSkinModel;
+
+    /** Local-only cosmetic cape path for offline accounts. */
+    private String localCapePath;
 
     public ClientAccount() {}
 
@@ -210,5 +221,29 @@ public class ClientAccount {
 
     public void setTokenIssuedAt(long tokenIssuedAt) {
         this.tokenIssuedAt = tokenIssuedAt;
+    }
+
+    public String getLocalSkinPath() {
+        return localSkinPath;
+    }
+
+    public void setLocalSkinPath(String localSkinPath) {
+        this.localSkinPath = localSkinPath;
+    }
+
+    public SkinModel getLocalSkinModel() {
+        return localSkinModel;
+    }
+
+    public void setLocalSkinModel(SkinModel localSkinModel) {
+        this.localSkinModel = localSkinModel;
+    }
+
+    public String getLocalCapePath() {
+        return localCapePath;
+    }
+
+    public void setLocalCapePath(String localCapePath) {
+        this.localCapePath = localCapePath;
     }
 }

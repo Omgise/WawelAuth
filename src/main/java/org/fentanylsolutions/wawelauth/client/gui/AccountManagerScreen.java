@@ -24,6 +24,7 @@ import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.wawelclient.BuiltinProviders;
 import org.fentanylsolutions.wawelauth.wawelclient.ProviderRegistry;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerBindingPersistence;
@@ -391,11 +392,10 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                         new Widget<>().size(4, 16)
                             .setEnabledIf(widget -> !isCapeUploadDisabledForSelectedProvider()))
                     .child(
-                        GuiText
-                            .fitButtonLabel(
-                                new ButtonWidget<>().size(64, 16),
-                                64,
-                                "wawelauth.gui.account_manager.upload")
+                        new ButtonWidget<>().size(64, 16)
+                            .overlay(
+                                IKey.dynamic(
+                                    () -> GuiText.ellipsizeToPixelWidth(GuiText.tr(getTextureActionLabelKey()), 56)))
                             .onMousePressed(mouseButton -> {
                                 attemptTextureUpload();
                                 return true;
@@ -2007,6 +2007,11 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         ClientProvider provider = resolveProvider(
             client.getProviderRegistry()
                 .getProvider(account.getProviderName()));
+        if (ProviderDisplayName.isOfflineProvider(account.getProviderName())) {
+            loadOfflinePreviewTextures(account, uuid, frontRequestId, backRequestId);
+            applyCapePreviewVisibility();
+            return;
+        }
         WawelAuth.debug("Preview fetch profile via fillProfileFromProvider: " + UuidUtil.toUnsigned(uuid));
 
         CompletableFuture.supplyAsync(() -> {
@@ -2174,6 +2179,39 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         } catch (Exception e) {
             WawelAuth.debug("Failed to parse textures from profile: " + e.getMessage());
         }
+    }
+
+    private void loadOfflinePreviewTextures(ClientAccount account, UUID uuid, long frontRequestId, long backRequestId) {
+        SkinModel model = account.getLocalSkinModel();
+        previewFrontEntity.setForcedSkinModel(model);
+        previewBackEntity.setForcedSkinModel(model);
+
+        File skinFile = fileFromStoredPath(account.getLocalSkinPath());
+        if (skinFile != null) {
+            previewFrontEntity.setSkinFromLocalFile(skinFile, uuid, frontRequestId);
+            previewBackEntity.setSkinFromLocalFile(skinFile, uuid, backRequestId);
+        } else {
+            previewFrontEntity.setSkinFromExisting(null, frontRequestId);
+            previewBackEntity.setSkinFromExisting(null, backRequestId);
+        }
+
+        File capeFile = fileFromStoredPath(account.getLocalCapePath());
+        if (capeFile != null) {
+            previewFrontEntity.setCapeFromLocalFile(capeFile, uuid, frontRequestId);
+            previewBackEntity.setCapeFromLocalFile(capeFile, uuid, backRequestId);
+        } else {
+            previewFrontEntity.setCapeFromExisting(null, frontRequestId);
+            previewBackEntity.setCapeFromExisting(null, backRequestId);
+        }
+    }
+
+    private static File fileFromStoredPath(String path) {
+        if (path == null || path.trim()
+            .isEmpty()) {
+            return null;
+        }
+        File file = new File(path);
+        return file.isFile() ? file : null;
     }
 
     private void prepareEntityPreview(PlayerPreviewEntity entity, boolean backView) {
@@ -2540,6 +2578,23 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             .isEmpty();
     }
 
+    private boolean isOfflineTextureAction() {
+        if (selectedAccount != null && ProviderDisplayName.isOfflineProvider(selectedAccount.getProviderName())) {
+            return true;
+        }
+        return selectedProvider != null && ProviderDisplayName.isOfflineProvider(selectedProvider.getName());
+    }
+
+    private String getTextureActionLabelKey() {
+        return isOfflineTextureAction() ? "wawelauth.gui.account_manager.apply"
+            : "wawelauth.gui.account_manager.upload";
+    }
+
+    private String getTextureActionInProgressKey() {
+        return isOfflineTextureAction() ? "wawelauth.gui.account_manager.applying"
+            : "wawelauth.gui.account_manager.uploading";
+    }
+
     private void chooseTextureFile(boolean skin) {
         if (selectedAccount == null) {
             textureUploadStatus = GuiText.tr("wawelauth.gui.common.select_account_first");
@@ -2579,6 +2634,27 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         openTexturePathDialog(skin);
     }
 
+    private void handleTextureActionSuccess(WawelClient client, long accountId, String result) {
+        textureUploadStatus = result != null ? result : GuiText.tr("wawelauth.gui.account_manager.upload_complete");
+        ClientAccount refreshed = client.getAccountManager()
+            .getAccount(accountId);
+        if (selectedAccount != null && selectedAccount.getId() == accountId) {
+            if (refreshed != null) {
+                selectedAccount = refreshed;
+            }
+            if (selectedAccount.getProfileUuid() != null) {
+                client.getSkinResolver()
+                    .invalidate(selectedAccount.getProfileUuid());
+                LocalTextureLoader.invalidateOfflineCape(selectedAccount.getProfileUuid());
+            }
+            loadSkinForAccount(selectedAccount);
+        }
+        if (selectedProvider != null) {
+            rebuildAccountList();
+            requestAccountListRebuild();
+        }
+    }
+
     private void attemptTextureUpload() {
         if (selectedAccount == null) {
             textureUploadStatus = GuiText.tr("wawelauth.gui.common.select_account_first");
@@ -2598,7 +2674,19 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         final File skin = selectedSkinFile;
         final File cape = selectedCapeFile;
         final boolean skinSlim = skinUploadSlim;
-        textureUploadStatus = GuiText.tr("wawelauth.gui.account_manager.uploading");
+        textureUploadStatus = GuiText.tr(getTextureActionInProgressKey());
+
+        if (ProviderDisplayName.isOfflineProvider(selectedAccount.getProviderName())) {
+            try {
+                String result = client.getAccountManager()
+                    .applyOfflineTextures(accountId, skin, cape, skinSlim);
+                handleTextureActionSuccess(client, accountId, result);
+            } catch (Exception e) {
+                textureUploadStatus = GuiText.tr("wawelauth.gui.common.failed_message", e.getMessage());
+                WawelAuth.debug("Texture apply failed: " + e.getMessage());
+            }
+            return;
+        }
 
         client.getAccountManager()
             .uploadTextures(accountId, skin, cape, skinSlim)
@@ -2611,26 +2699,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                             WawelAuth.debug("Texture upload failed: " + cause.getMessage());
                             return;
                         }
-
-                        textureUploadStatus = result != null ? result
-                            : GuiText.tr("wawelauth.gui.account_manager.upload_complete");
-                        ClientAccount refreshed = client.getAccountManager()
-                            .getAccount(accountId);
-                        if (selectedAccount != null && selectedAccount.getId() == accountId) {
-                            if (refreshed != null) {
-                                selectedAccount = refreshed;
-                            }
-                            // Invalidate cached profile so the next fetch gets the new skin URL
-                            if (selectedAccount.getProfileUuid() != null) {
-                                client.getSkinResolver()
-                                    .invalidate(selectedAccount.getProfileUuid());
-                            }
-                            loadSkinForAccount(selectedAccount);
-                        }
-                        if (selectedProvider != null) {
-                            rebuildAccountList();
-                            requestAccountListRebuild();
-                        }
+                        handleTextureActionSuccess(client, accountId, result);
                     });
             });
     }
@@ -2799,7 +2868,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     private boolean isSkinUploadDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
-            return true;
+            return false;
         }
         return Config.client()
             .isSkinUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
@@ -2808,7 +2877,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     private boolean isCapeUploadDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
-            return true;
+            return false;
         }
         return Config.client()
             .isCapeUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
@@ -2821,7 +2890,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     private boolean isTextureResetDisabledForSelectedProvider() {
         if (selectedProvider == null) return false;
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
-            return true;
+            return false;
         }
         return Config.client()
             .isTextureResetDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
@@ -2910,6 +2979,21 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             previewBackEntity.clearTextures();
         }
 
+        if (ProviderDisplayName.isOfflineProvider(selectedAccount.getProviderName())) {
+            try {
+                String result = client.getAccountManager()
+                    .resetOfflineTextures(accountId);
+                handleTextureResetSuccess(client, accountId, result);
+            } catch (Exception e) {
+                textureUploadStatus = GuiText.tr("wawelauth.gui.common.failed_message", e.getMessage());
+                WawelAuth.debug("Texture reset failed: " + e.getMessage());
+                if (selectedAccount != null && selectedAccount.getId() == accountId) {
+                    loadSkinForAccount(selectedAccount);
+                }
+            }
+            return;
+        }
+
         client.getAccountManager()
             .deleteTextures(accountId)
             .whenComplete((result, err) -> {
@@ -2925,29 +3009,32 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                             }
                             return;
                         }
-
-                        textureUploadStatus = result != null ? result
-                            : GuiText.tr("wawelauth.gui.account_manager.reset_complete");
-                        selectedSkinFile = null;
-                        selectedCapeFile = null;
-                        ClientAccount refreshed = client.getAccountManager()
-                            .getAccount(accountId);
-                        if (selectedAccount != null && selectedAccount.getId() == accountId) {
-                            if (refreshed != null) {
-                                selectedAccount = refreshed;
-                            }
-                            if (selectedAccount.getProfileUuid() != null) {
-                                client.getSkinResolver()
-                                    .invalidate(selectedAccount.getProfileUuid());
-                            }
-                            loadSkinForAccount(selectedAccount);
-                        }
-                        if (selectedProvider != null) {
-                            rebuildAccountList();
-                            requestAccountListRebuild();
-                        }
+                        handleTextureResetSuccess(client, accountId, result);
                     });
             });
+    }
+
+    private void handleTextureResetSuccess(WawelClient client, long accountId, String result) {
+        textureUploadStatus = result != null ? result : GuiText.tr("wawelauth.gui.account_manager.reset_complete");
+        selectedSkinFile = null;
+        selectedCapeFile = null;
+        ClientAccount refreshed = client.getAccountManager()
+            .getAccount(accountId);
+        if (selectedAccount != null && selectedAccount.getId() == accountId) {
+            if (refreshed != null) {
+                selectedAccount = refreshed;
+            }
+            if (selectedAccount.getProfileUuid() != null) {
+                client.getSkinResolver()
+                    .invalidate(selectedAccount.getProfileUuid());
+                LocalTextureLoader.invalidateOfflineCape(selectedAccount.getProfileUuid());
+            }
+            loadSkinForAccount(selectedAccount);
+        }
+        if (selectedProvider != null) {
+            rebuildAccountList();
+            requestAccountListRebuild();
+        }
     }
 
     private boolean isCredentialManagementAvailableForSelectedAccount() {

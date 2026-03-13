@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.client.gui;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
@@ -15,6 +17,7 @@ import net.minecraft.util.ResourceLocation;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
 import org.fentanylsolutions.wawelauth.client.render.ISkinModelOverride;
+import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.client.render.ProviderThreadDownloadImageData;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
 import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderRoutedHttp;
@@ -132,6 +135,38 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
         }
     }
 
+    public void setSkinFromLocalFile(File file, UUID profileUuid, long requestId) {
+        if (isRequestStale(requestId)) return;
+        if (file == null || !file.isFile()) {
+            setSkinFromExisting(null, requestId);
+            return;
+        }
+
+        final ResourceLocation location = makeSkinLocation(profileUuid);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return LocalTextureLoader.readImage(file);
+            } catch (Exception e) {
+                WawelAuth.debug("Failed to read local preview skin: " + e.getMessage());
+                return null;
+            }
+        })
+            .whenComplete((image, err) -> {
+                if (image == null || isRequestStale(requestId)) return;
+                Minecraft.getMinecraft()
+                    .func_152344_a(() -> {
+                        if (isRequestStale(requestId)) return;
+                        try {
+                            ResourceLocation registered = LocalTextureLoader.registerBufferedImage(location, image);
+                            unloadOldSkin(registered);
+                            this.customSkin = registered;
+                        } catch (Exception e) {
+                            WawelAuth.debug("Failed to register local preview skin: " + e.getMessage());
+                        }
+                    });
+            });
+    }
+
     public void setCapeFromUrl(String url, UUID profileUuid, long requestId) {
         setCapeFromUrl(url, profileUuid, requestId, null);
     }
@@ -156,6 +191,43 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
             this.customCape = location;
             this.animatedCape = null;
         }
+    }
+
+    public void setCapeFromLocalFile(File file, UUID profileUuid, long requestId) {
+        if (isRequestStale(requestId)) return;
+        if (file == null || !file.isFile()) {
+            setCapeFromExisting(null, requestId);
+            return;
+        }
+        if (LocalTextureLoader.isGifPath(file.getName())) {
+            setCapeAnimatedFromLocalFile(file, profileUuid, requestId);
+            return;
+        }
+
+        final ResourceLocation location = makeCapeLocation(profileUuid);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return LocalTextureLoader.readImage(file);
+            } catch (Exception e) {
+                WawelAuth.debug("Failed to read local preview cape: " + e.getMessage());
+                return null;
+            }
+        })
+            .whenComplete((image, err) -> {
+                if (image == null || isRequestStale(requestId)) return;
+                Minecraft.getMinecraft()
+                    .func_152344_a(() -> {
+                        if (isRequestStale(requestId)) return;
+                        try {
+                            ResourceLocation registered = LocalTextureLoader.registerBufferedImage(location, image);
+                            unloadOldCape(registered);
+                            this.customCape = registered;
+                            this.animatedCape = null;
+                        } catch (Exception e) {
+                            WawelAuth.debug("Failed to register local preview cape: " + e.getMessage());
+                        }
+                    });
+            });
     }
 
     /**
@@ -200,6 +272,36 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
                         if (onReady != null) {
                             onReady.run();
                         }
+                    });
+            });
+    }
+
+    public void setCapeAnimatedFromLocalFile(File file, UUID profileUuid, long requestId) {
+        if (isRequestStale(requestId)) return;
+        if (file == null || !file.isFile()) {
+            setCapeFromExisting(null, requestId);
+            return;
+        }
+
+        final String locationPath = "capes/" + texturePrefix + "/anim/" + UuidUtil.toUnsigned(profileUuid);
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return AnimatedCapeTexture.decodeGif(Files.readAllBytes(file.toPath()));
+            } catch (Exception e) {
+                WawelAuth.debug("Failed to read local animated preview cape: " + e.getMessage());
+                return null;
+            }
+        })
+            .whenComplete((decoded, err) -> {
+                if (decoded == null || isRequestStale(requestId)) return;
+                Minecraft.getMinecraft()
+                    .func_152344_a(() -> {
+                        if (isRequestStale(requestId)) return;
+                        AnimatedCapeTexture tex = AnimatedCapeTexture.createFromDecoded(decoded, locationPath);
+                        if (tex == null) return;
+                        unloadOldCape(tex.getResourceLocation());
+                        this.animatedCape = tex;
+                        this.customCape = tex.getResourceLocation();
                     });
             });
     }

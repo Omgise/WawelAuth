@@ -222,7 +222,7 @@ public class SessionBridge {
             return new LookupContext(null, null, Collections.emptyList(), allowVanillaFallback);
         }
         if (isOfflineProvider(provider)) {
-            return new LookupContext(null, null, Collections.emptyList(), false);
+            return new LookupContext(null, provider, Collections.singletonList(provider), false);
         }
         return new LookupContext(null, provider, Collections.singletonList(provider), allowVanillaFallback);
     }
@@ -713,6 +713,40 @@ public class SessionBridge {
         return resolveUniqueLocalProviderForProfile(profileId);
     }
 
+    public OfflineLocalSkin resolveOfflineLocalSkin(UUID profileId) {
+        return resolveOfflineLocalSkin(profileId, activeLookupContext.get());
+    }
+
+    public OfflineLocalSkin resolveOfflineLocalSkin(UUID profileId, LookupContext lookupContext) {
+        if (profileId == null || accountDAO == null) {
+            return null;
+        }
+
+        if (lookupContext != null) {
+            ClientProvider direct = lookupContext.getProvider();
+            if (isOfflineProvider(direct)) {
+                return toOfflineLocalSkin(
+                    accountDAO.findByProviderAndProfile(BuiltinProviders.OFFLINE_PROVIDER_NAME, profileId));
+            }
+            return null;
+        }
+
+        if (isClientWorldLoaded()) {
+            if (isOfflineProvider(activeProvider) && activeAccount != null
+                && profileId.equals(activeAccount.getProfileUuid())) {
+                return toOfflineLocalSkin(activeAccount);
+            }
+            return null;
+        }
+
+        return resolveUniqueOfflineLocalSkin(profileId);
+    }
+
+    public org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel resolveOfflineLocalSkinModel(UUID profileId) {
+        OfflineLocalSkin localSkin = resolveOfflineLocalSkin(profileId);
+        return localSkin != null && localSkin.getSkinPath() != null ? localSkin.getSkinModel() : null;
+    }
+
     private ClientProvider resolveProviderForProfile(UUID profileId) {
         if (profileId == null || accountDAO == null || providerDAO == null) {
             return null;
@@ -773,6 +807,38 @@ public class SessionBridge {
             if (!resolvedIdentity.equals(identity)) {
                 return null;
             }
+        }
+
+        return resolved;
+    }
+
+    private OfflineLocalSkin resolveUniqueOfflineLocalSkin(UUID profileId) {
+        OfflineLocalSkin resolved = null;
+
+        for (ClientAccount account : accountDAO.listAll()) {
+            if (account == null || account.getProfileUuid() == null || !profileId.equals(account.getProfileUuid())) {
+                continue;
+            }
+
+            String providerName = account.getProviderName();
+            if (providerName == null || providerName.trim()
+                .isEmpty()) {
+                return null;
+            }
+
+            if (!BuiltinProviders.isOfflineProvider(providerName)) {
+                return null;
+            }
+
+            OfflineLocalSkin candidate = toOfflineLocalSkin(account);
+            if (candidate == null) {
+                return null;
+            }
+
+            if (resolved != null) {
+                return null;
+            }
+            resolved = candidate;
         }
 
         return resolved;
@@ -1291,6 +1357,32 @@ public class SessionBridge {
         return provider != null && BuiltinProviders.isOfflineProvider(provider.getName());
     }
 
+    private static OfflineLocalSkin toOfflineLocalSkin(ClientAccount account) {
+        if (account == null || !BuiltinProviders.isOfflineProvider(account.getProviderName())) {
+            return null;
+        }
+
+        String skinPath = trimToNull(account.getLocalSkinPath());
+        String capePath = trimToNull(account.getLocalCapePath());
+        if (skinPath == null && capePath == null) {
+            return null;
+        }
+
+        return new OfflineLocalSkin(
+            skinPath,
+            account.getLocalSkinModel() != null ? account.getLocalSkinModel()
+                : org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel.CLASSIC,
+            capePath);
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
     private static boolean isUsableProfileProvider(ClientProvider provider) {
         return provider != null && !isOfflineProvider(provider);
     }
@@ -1592,6 +1684,32 @@ public class SessionBridge {
 
         public boolean isVanillaFallbackAllowed() {
             return allowVanillaFallback;
+        }
+    }
+
+    public static final class OfflineLocalSkin {
+
+        private final String skinPath;
+        private final org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel skinModel;
+        private final String capePath;
+
+        private OfflineLocalSkin(String skinPath, org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel skinModel,
+            String capePath) {
+            this.skinPath = skinPath;
+            this.skinModel = skinModel;
+            this.capePath = capePath;
+        }
+
+        public String getSkinPath() {
+            return skinPath;
+        }
+
+        public org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel getSkinModel() {
+            return skinModel;
+        }
+
+        public String getCapePath() {
+            return capePath;
         }
     }
 

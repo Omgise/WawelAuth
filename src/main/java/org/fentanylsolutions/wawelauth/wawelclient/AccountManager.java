@@ -24,6 +24,7 @@ import org.fentanylsolutions.wawelauth.wawelclient.http.YggdrasilRequestExceptio
 import org.fentanylsolutions.wawelauth.wawelclient.oauth.MicrosoftOAuthClient;
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientAccountDAO;
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientProviderDAO;
+import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 
 import com.google.gson.JsonArray;
@@ -323,6 +324,29 @@ public class AccountManager {
             }
         });
         return future;
+    }
+
+    public String applyOfflineTextures(long accountId, File skinFile, File capeFile, boolean skinSlim)
+        throws IOException {
+        ClientAccount account = accountDAO.findById(accountId);
+        if (account == null) {
+            throw new IllegalArgumentException("Account not found: " + accountId);
+        }
+        if (!BuiltinProviders.isOfflineProvider(account.getProviderName())) {
+            throw new IllegalArgumentException("Account is not an offline account: " + accountId);
+        }
+        return doUploadOfflineTextures(account, skinFile, capeFile, skinSlim);
+    }
+
+    public String resetOfflineTextures(long accountId) {
+        ClientAccount account = accountDAO.findById(accountId);
+        if (account == null) {
+            throw new IllegalArgumentException("Account not found: " + accountId);
+        }
+        if (!BuiltinProviders.isOfflineProvider(account.getProviderName())) {
+            throw new IllegalArgumentException("Account is not an offline account: " + accountId);
+        }
+        return doDeleteOfflineTextures(account);
     }
 
     // =========================================================================
@@ -633,6 +657,9 @@ public class AccountManager {
         if (existing != null) {
             account.setId(existing.getId());
             account.setCreatedAt(existing.getCreatedAt());
+            account.setLocalSkinPath(existing.getLocalSkinPath());
+            account.setLocalSkinModel(existing.getLocalSkinModel());
+            account.setLocalCapePath(existing.getLocalCapePath());
             accountDAO.update(account);
         } else {
             long id = accountDAO.create(account);
@@ -1120,82 +1147,6 @@ public class AccountManager {
     // encryption layer would hook in here)
     // =========================================================================
 
-    private String doUploadTextures(ClientAccount account, File skinFile, File capeFile, boolean skinSlim)
-        throws IOException, YggdrasilRequestException {
-        if (skinFile == null && capeFile == null) {
-            throw new IllegalArgumentException("No skin or cape file selected.");
-        }
-        if (account.getProfileUuid() == null) {
-            throw new IllegalArgumentException("Selected account has no bound profile UUID.");
-        }
-
-        ClientProvider provider = providerDAO.findByName(account.getProviderName());
-        if (provider == null) {
-            throw new IllegalArgumentException("Provider not found: " + account.getProviderName());
-        }
-        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
-            throw new IllegalArgumentException("Offline accounts do not support skins or capes.");
-        }
-        if (BuiltinProviders.isMojangProvider(provider.getName())) {
-            return doUploadTexturesMicrosoft(account, provider, skinFile, capeFile, skinSlim);
-        }
-
-        // Ensure the account token is usable before upload.
-        AccountStatus status = doValidateOrRefresh(account);
-        if (status == AccountStatus.EXPIRED) {
-            throw new IllegalArgumentException("Account token expired. Please re-authenticate first.");
-        }
-        if (status == AccountStatus.UNVERIFIED) {
-            throw new IOException("Account token could not be verified (provider unreachable).");
-        }
-
-        String accessToken = account.getAccessToken();
-        String baseUrl = resolveServicesBase(provider);
-        String profileId = UuidUtil.toUnsigned(account.getProfileUuid());
-
-        int uploaded = 0;
-        if (skinFile != null) {
-            ensureReadableImageFile(skinFile, "Skin");
-            Map<String, String> skinFields = new LinkedHashMap<>();
-            skinFields.put("model", skinSlim ? "slim" : "");
-            String skinUrl = baseUrl + "/api/user/profile/" + profileId + "/skin";
-            httpClient.putMultipart(
-                provider,
-                skinUrl,
-                accessToken,
-                "file",
-                skinFile,
-                imageContentTypeFor(skinFile),
-                skinFields);
-            uploaded++;
-        }
-        if (capeFile != null) {
-            ensureReadableImageFile(capeFile, "Cape");
-            Map<String, String> capeFields = new LinkedHashMap<>();
-            String capeUrl = baseUrl + "/api/user/profile/" + profileId + "/cape";
-            httpClient.putMultipart(
-                provider,
-                capeUrl,
-                accessToken,
-                "file",
-                capeFile,
-                imageContentTypeFor(capeFile),
-                capeFields);
-            uploaded++;
-        }
-
-        String result;
-        if (uploaded == 2) {
-            result = "Uploaded skin and cape.";
-        } else if (skinFile != null) {
-            result = "Uploaded skin.";
-        } else {
-            result = "Uploaded cape.";
-        }
-        WawelAuth.debug("Texture upload completed for account " + account.getId() + ": " + result);
-        return result;
-    }
-
     private String doUploadTexturesMicrosoft(ClientAccount account, ClientProvider provider, File skinFile,
         File capeFile, boolean skinSlim) throws IOException, YggdrasilRequestException {
         if (skinFile == null && capeFile != null) {
@@ -1240,7 +1191,7 @@ public class AccountManager {
             throw new IllegalArgumentException("Provider not found: " + account.getProviderName());
         }
         if (BuiltinProviders.isOfflineProvider(provider.getName())) {
-            throw new IllegalArgumentException("Offline accounts do not support skin or cape reset.");
+            return doDeleteOfflineTextures(account);
         }
         if (BuiltinProviders.isMojangProvider(provider.getName())) {
             return doDeleteTexturesMicrosoft(account, provider);
@@ -1285,6 +1236,14 @@ public class AccountManager {
         String result = "Skin reset.";
         WawelAuth.debug("Texture delete completed for Microsoft account " + account.getId() + ": " + result);
         return result;
+    }
+
+    private String doDeleteOfflineTextures(ClientAccount account) {
+        account.setLocalSkinPath(null);
+        account.setLocalSkinModel(null);
+        account.setLocalCapePath(null);
+        accountDAO.update(account);
+        return "Cleared local offline skin and cape.";
     }
 
     private static String resolveServicesBase(ClientProvider provider) {
@@ -1419,6 +1378,114 @@ public class AccountManager {
             throw new IllegalArgumentException("Offline account names must use 1-16 letters, digits, or underscores.");
         }
         return clean;
+    }
+
+    private String doUploadTextures(ClientAccount account, File skinFile, File capeFile, boolean skinSlim)
+        throws IOException, YggdrasilRequestException {
+        if (account.getProfileUuid() == null) {
+            throw new IllegalArgumentException("Selected account has no bound profile UUID.");
+        }
+
+        ClientProvider provider = providerDAO.findByName(account.getProviderName());
+        if (provider == null) {
+            throw new IllegalArgumentException("Provider not found: " + account.getProviderName());
+        }
+        if (BuiltinProviders.isOfflineProvider(provider.getName())) {
+            return doUploadOfflineTextures(account, skinFile, capeFile, skinSlim);
+        }
+        if (BuiltinProviders.isMojangProvider(provider.getName())) {
+            return doUploadTexturesMicrosoft(account, provider, skinFile, capeFile, skinSlim);
+        }
+
+        // Ensure the account token is usable before upload.
+        AccountStatus status = doValidateOrRefresh(account);
+        if (status == AccountStatus.EXPIRED) {
+            throw new IllegalArgumentException("Account token expired. Please re-authenticate first.");
+        }
+        if (status == AccountStatus.UNVERIFIED) {
+            throw new IOException("Account token could not be verified (provider unreachable).");
+        }
+
+        if (skinFile == null && capeFile == null) {
+            throw new IllegalArgumentException("Select a skin or cape file.");
+        }
+        if (skinFile != null) {
+            ensureReadableImageFile(skinFile, "Skin");
+        }
+        if (capeFile != null) {
+            ensureReadableImageFile(capeFile, "Cape");
+        }
+
+        String accessToken = account.getAccessToken();
+        String baseUrl = resolveServicesBase(provider);
+        String profileId = UuidUtil.toUnsigned(account.getProfileUuid());
+
+        int uploaded = 0;
+
+        if (skinFile != null) {
+            String skinUrl = baseUrl + "/api/user/profile/" + profileId + "/skin";
+            Map<String, String> skinFields = new LinkedHashMap<>();
+            skinFields.put("model", skinSlim ? "slim" : "");
+            httpClient.putMultipart(
+                provider,
+                skinUrl,
+                accessToken,
+                "file",
+                skinFile,
+                imageContentTypeFor(skinFile),
+                skinFields);
+            uploaded++;
+        }
+
+        if (capeFile != null) {
+            String capeUrl = baseUrl + "/api/user/profile/" + profileId + "/cape";
+            Map<String, String> capeFields = new LinkedHashMap<>();
+            httpClient.putMultipart(
+                provider,
+                capeUrl,
+                accessToken,
+                "file",
+                capeFile,
+                imageContentTypeFor(capeFile),
+                capeFields);
+            uploaded++;
+        }
+
+        String result;
+        if (uploaded == 2) {
+            result = "Uploaded skin and cape.";
+        } else if (skinFile != null) {
+            result = "Uploaded skin.";
+        } else {
+            result = "Uploaded cape.";
+        }
+        WawelAuth.debug("Texture upload completed for account " + account.getId() + ": " + result);
+        return result;
+    }
+
+    private String doUploadOfflineTextures(ClientAccount account, File skinFile, File capeFile, boolean skinSlim)
+        throws IOException {
+        if (skinFile == null && capeFile == null) {
+            throw new IllegalArgumentException("Select a skin or cape file.");
+        }
+
+        if (skinFile != null) {
+            ensureReadablePngFile(skinFile, "Skin");
+            account.setLocalSkinPath(skinFile.getAbsolutePath());
+            account.setLocalSkinModel(skinSlim ? SkinModel.SLIM : SkinModel.CLASSIC);
+        }
+        if (capeFile != null) {
+            ensureReadableImageFile(capeFile, "Cape");
+            account.setLocalCapePath(capeFile.getAbsolutePath());
+        }
+        accountDAO.update(account);
+        if (skinFile != null && capeFile != null) {
+            return "Applied local offline skin and cape.";
+        }
+        if (skinFile != null) {
+            return "Applied local offline skin.";
+        }
+        return "Applied local offline cape.";
     }
 
 }

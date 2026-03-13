@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.api;
 
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.net.URI;
 import java.security.PublicKey;
 import java.util.ArrayList;
@@ -26,12 +28,14 @@ import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.client.render.IProviderAwareSkinManager;
+import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.client.render.SkinTextureState;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.wawelclient.IServerDataExt;
 import org.fentanylsolutions.wawelauth.wawelclient.ServerCapabilities;
 import org.fentanylsolutions.wawelauth.wawelclient.SessionBridge;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
+import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 import org.lwjgl.opengl.GL11;
 
 import com.google.gson.JsonArray;
@@ -432,6 +436,13 @@ public class WawelSkinResolver {
         MinecraftSessionService sessionService = Minecraft.getMinecraft()
             .func_152347_ac();
         SessionBridge.LookupContext lookupContext = entry.lookupContext;
+        SessionBridge.OfflineLocalSkin offlineLocalSkin = sessionBridge
+            .resolveOfflineLocalSkin(profileId, lookupContext);
+
+        if (offlineLocalSkin != null && offlineLocalSkin.getSkinPath() != null) {
+            resolveOfflineLocalSkin(entry, profileId, offlineLocalSkin);
+            return;
+        }
 
         if (!allowVanilla && !sessionBridge.hasProviderForProfile(profileId, lookupContext)) {
             entry.state = FetchState.PLACEHOLDER;
@@ -504,6 +515,40 @@ public class WawelSkinResolver {
                     entry.retryCount = 0;
                 } catch (Exception e) {
                     WawelAuth.debug("Failed to register skin texture for " + profileId + ": " + e.getMessage());
+                    handleFetchFailure(entry);
+                }
+            });
+    }
+
+    private void resolveOfflineLocalSkin(SkinEntry entry, UUID profileId,
+        SessionBridge.OfflineLocalSkin offlineLocalSkin) {
+        final BufferedImage skinImage;
+        try {
+            skinImage = LocalTextureLoader.readImage(new File(offlineLocalSkin.getSkinPath()));
+        } catch (Exception e) {
+            WawelAuth.debug("Failed to load local offline skin for " + profileId + ": " + e.getMessage());
+            handleFetchFailure(entry);
+            return;
+        }
+
+        Minecraft.getMinecraft()
+            .func_152344_a(() -> {
+                try {
+                    ResourceLocation location = new ResourceLocation(
+                        "wawelauth",
+                        "offline_skins/" + UuidUtil.toUnsigned(profileId));
+                    ResourceLocation registeredLocation = LocalTextureLoader.registerBufferedImage(location, skinImage);
+                    if (!hasUsableRegisteredTexture(registeredLocation)) {
+                        WawelAuth.debug("Local offline skin registration was not usable yet for " + profileId);
+                        handleFetchFailure(entry);
+                        return;
+                    }
+                    entry.skinLocation = registeredLocation;
+                    entry.state = FetchState.RESOLVED;
+                    entry.resolvedAtMs = System.currentTimeMillis();
+                    entry.retryCount = 0;
+                } catch (Exception e) {
+                    WawelAuth.debug("Failed to register local offline skin for " + profileId + ": " + e.getMessage());
                     handleFetchFailure(entry);
                 }
             });
