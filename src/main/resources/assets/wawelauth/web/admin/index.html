@@ -43,6 +43,7 @@
 
             <nav class="nav card section" id="navBar">
                 <button class="nav-btn active" type="button" data-view-target="dashboardView">Dashboard</button>
+                <button class="nav-btn" type="button" data-view-target="usersView">Users</button>
                 <button class="nav-btn" type="button" data-view-target="configView">Server Config</button>
                 <button class="nav-btn" type="button" data-view-target="opsView">Ops</button>
                 <button class="nav-btn" type="button" data-view-target="whitelistView">Whitelist</button>
@@ -59,53 +60,45 @@
                     <article class="card stat"><h3>Textures</h3><strong id="statTexturesSize">-</strong></article>
                 </div>
 
-                <div class="content-grid">
-                    <section class="card section">
-                        <h2>Invites</h2>
-                        <form id="inviteForm" class="invite-form">
-                            <div>
-                                <label for="inviteUses">Uses (-1 = unlimited)</label>
-                                <input id="inviteUses" type="number" value="1" min="-1" step="1">
-                            </div>
-                            <button id="inviteCreateBtn" type="submit">Create Invite</button>
-                            <button id="invitePurgeBtn" type="button">Purge Consumed</button>
-                        </form>
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Code</th>
-                                        <th>Uses</th>
-                                        <th>Created</th>
-                                        <th></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="invitesBody"></tbody>
-                            </table>
+                <section class="card section">
+                    <h2>Invites</h2>
+                    <form id="inviteForm" class="invite-form">
+                        <div>
+                            <label for="inviteUses">Uses (-1 = unlimited)</label>
+                            <input id="inviteUses" type="number" value="1" min="-1" step="1">
                         </div>
-                    </section>
+                        <button id="inviteCreateBtn" type="submit">Create Invite</button>
+                        <button id="invitePurgeBtn" type="button">Purge Consumed</button>
+                    </form>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Uses</th>
+                                    <th>Created</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="invitesBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
 
-                    <section class="card section">
-                        <h2>Users</h2>
-                        <div class="users-toolbar">
-                            <input id="userFilterInput" type="text" placeholder="Filter users by name..." autocomplete="off">
-                        </div>
-                        <div class="table-wrap">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Username</th>
-                                        <th>UUID</th>
-                                        <th>Profiles</th>
-                                        <th>Flags</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="usersBody"></tbody>
-                            </table>
-                        </div>
-                    </section>
-                </div>
+            <section id="usersView" class="view-section hidden">
+                <section class="card section">
+                    <h2>Users</h2>
+                    <div class="users-toolbar">
+                        <input id="userFilterInput" type="text" placeholder="Filter users by name..." autocomplete="off">
+                    </div>
+                    <div class="table-wrap">
+                        <table id="usersTable" class="users-table">
+                            <thead id="usersHead"></thead>
+                            <tbody id="usersBody"></tbody>
+                        </table>
+                    </div>
+                </section>
             </section>
 
             <section id="configView" class="view-section hidden">

@@ -32,6 +32,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.crypto.Cipher;
 
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.gui.IUpdatePlayerListBox;
 import net.minecraft.server.management.ServerConfigurationManager;
@@ -101,6 +102,7 @@ public class AdminWebService {
     private final byte[] appJs;
     private final byte[] stylesCss;
     private final byte[] logoPng;
+    private final byte[] nerdSymbolsSubsetWoff2;
 
     public AdminWebService(ServerConfig serverConfig, KeyManager keyManager, UserDAO userDAO, ProfileDAO profileDAO,
         TokenDAO tokenDAO, InviteDAO inviteDAO) {
@@ -114,6 +116,8 @@ public class AdminWebService {
         this.appJs = loadResourceBytes("/assets/wawelauth/web/admin/app.js");
         this.stylesCss = loadResourceBytes("/assets/wawelauth/web/admin/styles.css");
         this.logoPng = loadResourceBytes("/assets/wawelauth/Logo_Dragon_Outline.png");
+        this.nerdSymbolsSubsetWoff2 = loadResourceBytes(
+            "/assets/wawelauth/web/admin/fonts/nerd-fonts/SymbolsNerdFont-Subset.woff2");
 
         if (serverConfig.getAdmin()
             .isEnabled() && resolveConfiguredAdminToken() == null) {
@@ -131,6 +135,7 @@ public class AdminWebService {
         router.get("/admin/app.js", this::serveAppJs);
         router.get("/admin/styles.css", this::serveStylesCss);
         router.get("/admin/logo-dragon-outline.png", this::serveLogoPng);
+        router.get("/admin/fonts/nerd-fonts/SymbolsNerdFont-Subset.woff2", this::serveNerdSymbolsSubsetWoff2);
 
         router.get("/api/wawelauth/admin/bootstrap", this::bootstrap);
         router.post("/api/wawelauth/admin/login", this::login);
@@ -142,6 +147,8 @@ public class AdminWebService {
         router.post("/api/wawelauth/admin/users/{uuid}/delete", this::deleteUser);
         router.post("/api/wawelauth/admin/users/{uuid}/reset-password", this::resetUserPassword);
         router.post("/api/wawelauth/admin/users/{uuid}/reset-textures", this::resetUserTextures);
+        router.post("/api/wawelauth/admin/profiles/{uuid}/set-uuid", this::setProfileUuid);
+        router.post("/api/wawelauth/admin/profiles/{uuid}/use-offline-uuid", this::useOfflineProfileUuid);
         router.get("/api/wawelauth/admin/providers", this::providers);
         router.post("/api/wawelauth/admin/resolve-profile", this::resolveProfileForProvider);
         router.get("/api/wawelauth/admin/avatar", this::avatar);
@@ -176,6 +183,10 @@ public class AdminWebService {
 
     private Object serveLogoPng(RequestContext ctx) {
         return staticResponse(logoPng, "image/png");
+    }
+
+    private Object serveNerdSymbolsSubsetWoff2(RequestContext ctx) {
+        return staticResponse(nerdSymbolsSubsetWoff2, "font/woff2");
     }
 
     private Object bootstrap(RequestContext ctx) {
@@ -321,10 +332,7 @@ public class AdminWebService {
 
             List<Map<String, Object>> profileJson = new ArrayList<>();
             for (WawelProfile profile : profiles) {
-                Map<String, Object> p = new LinkedHashMap<>();
-                p.put("uuid", UuidUtil.toUnsigned(profile.getUuid()));
-                p.put("name", profile.getName());
-                profileJson.add(p);
+                profileJson.add(toAdminProfileJson(profile));
             }
 
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -411,6 +419,99 @@ public class AdminWebService {
         out.put("updatedProfiles", changed);
         out.put("username", user.getUsername());
         return out;
+    }
+
+    private Object setProfileUuid(RequestContext ctx) {
+        requireSession(ctx);
+        WawelProfile profile = requireProfileByPathParam(ctx, "uuid");
+        String newUuidRaw = trimToNull(ctx.optJsonString("newUuid"));
+        if (newUuidRaw == null) {
+            throw NetException.illegalArgument("newUuid is required.");
+        }
+        return changeProfileUuid(profile, parseUuidFlexible(newUuidRaw), false);
+    }
+
+    private Object useOfflineProfileUuid(RequestContext ctx) {
+        requireSession(ctx);
+        WawelProfile profile = requireProfileByPathParam(ctx, "uuid");
+        String name = trimToNull(profile.getName());
+        if (name == null) {
+            throw NetException.illegalArgument("Profile name is missing.");
+        }
+        return changeProfileUuid(profile, WawelProfile.computeOfflineUuid(name), true);
+    }
+
+    private Object changeProfileUuid(WawelProfile profile, UUID newUuid, boolean useOfflineUuid) {
+        UUID oldUuid = profile.getUuid();
+        if (oldUuid == null) {
+            throw NetException.illegalArgument("Profile UUID is missing.");
+        }
+        String profileName = trimToNull(profile.getName());
+        if (profileName == null) {
+            throw NetException.illegalArgument("Profile name is missing.");
+        }
+
+        WawelUser owner = requireUser(userDAO, profile.getOwnerUuid());
+        WawelProfile existing = profileDAO.findByUuid(newUuid);
+        if (existing != null && !oldUuid.equals(existing.getUuid())) {
+            throw NetException.illegalArgument("UUID is already assigned to profile " + existing.getName() + ".");
+        }
+
+        UUID offlineUuid = WawelProfile.computeOfflineUuid(profileName);
+        if (newUuid.equals(oldUuid)) {
+            return buildProfileUuidChangeResponse(
+                owner,
+                profile,
+                oldUuid,
+                newUuid,
+                offlineUuid,
+                useOfflineUuid,
+                false,
+                0,
+                0);
+        }
+
+        final List<WawelProfile> ownerProfiles = new ArrayList<>(profileDAO.findByOwner(owner.getUuid()));
+        final int invalidatedTokens = tokenDAO.findByUser(owner.getUuid())
+            .size();
+        final LinkedHashSet<UUID> kickUuids = new LinkedHashSet<>();
+        final LinkedHashSet<String> kickNames = new LinkedHashSet<>();
+        for (WawelProfile ownedProfile : ownerProfiles) {
+            if (ownedProfile.getUuid() != null) {
+                kickUuids.add(ownedProfile.getUuid());
+            }
+            String ownedName = trimToNull(ownedProfile.getName());
+            if (ownedName != null) {
+                kickNames.add(ownedName);
+            }
+        }
+        kickUuids.add(oldUuid);
+        kickUuids.add(newUuid);
+
+        runInServerTransaction(() -> {
+            tokenDAO.deleteByUser(owner.getUuid());
+            profileDAO.delete(oldUuid);
+            profile.setUuid(newUuid);
+            profile.updateOfflineUuid();
+            profileDAO.create(profile);
+        });
+
+        int kickedPlayers = callOnServerThread(
+            () -> kickOnlineProfiles(
+                kickUuids,
+                kickNames,
+                "Your Wawel Auth account was changed by an administrator. Please sign in again."));
+        WawelProfile updatedProfile = requireProfile(profileDAO, newUuid);
+        return buildProfileUuidChangeResponse(
+            owner,
+            updatedProfile,
+            oldUuid,
+            newUuid,
+            updatedProfile.getOfflineUuid(),
+            useOfflineUuid,
+            true,
+            invalidatedTokens,
+            kickedPlayers);
     }
 
     private Object providers(RequestContext ctx) {
@@ -1227,6 +1328,14 @@ public class AdminWebService {
         return user;
     }
 
+    private static WawelProfile requireProfile(ProfileDAO profileDAO, UUID profileUuid) {
+        WawelProfile profile = profileDAO.findByUuid(profileUuid);
+        if (profile == null) {
+            throw NetException.notFound("Profile not found.");
+        }
+        return profile;
+    }
+
     private WawelUser requireUserByPathParam(RequestContext ctx, String field) {
         String raw = trimToNull(ctx.getPathParam(field));
         if (raw == null) {
@@ -1234,6 +1343,15 @@ public class AdminWebService {
         }
         UUID uuid = parseUuidFlexible(raw);
         return requireUser(userDAO, uuid);
+    }
+
+    private WawelProfile requireProfileByPathParam(RequestContext ctx, String field) {
+        String raw = trimToNull(ctx.getPathParam(field));
+        if (raw == null) {
+            throw NetException.illegalArgument("Missing profile identifier.");
+        }
+        UUID uuid = parseUuidFlexible(raw);
+        return requireProfile(profileDAO, uuid);
     }
 
     private static UUID parseUuidFlexible(String value) {
@@ -1447,6 +1565,98 @@ public class AdminWebService {
         out.put("http", http);
 
         return out;
+    }
+
+    private static Map<String, Object> toAdminProfileJson(WawelProfile profile) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("uuid", UuidUtil.toUnsigned(profile.getUuid()));
+        out.put("name", profile.getName());
+        UUID offlineUuid = profile.getOfflineUuid();
+        if (offlineUuid == null) {
+            String name = trimToNull(profile.getName());
+            if (name != null) {
+                offlineUuid = WawelProfile.computeOfflineUuid(name);
+            }
+        }
+        out.put("offlineUuid", offlineUuid == null ? null : UuidUtil.toUnsigned(offlineUuid));
+        return out;
+    }
+
+    private Map<String, Object> buildProfileUuidChangeResponse(WawelUser owner, WawelProfile profile, UUID oldUuid,
+        UUID newUuid, UUID offlineUuid, boolean usedOfflineUuid, boolean changed, int invalidatedTokens,
+        int kickedPlayers) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("changed", changed);
+        out.put("usedOfflineUuid", usedOfflineUuid);
+        out.put("username", owner.getUsername());
+        out.put("profile", toAdminProfileJson(profile));
+        out.put("oldUuid", UuidUtil.toUnsigned(oldUuid));
+        out.put("newUuid", UuidUtil.toUnsigned(newUuid));
+        out.put("offlineUuid", offlineUuid == null ? null : UuidUtil.toUnsigned(offlineUuid));
+        out.put("invalidatedTokens", invalidatedTokens);
+        out.put("kickedPlayers", kickedPlayers);
+        return out;
+    }
+
+    private static int kickOnlineProfiles(LinkedHashSet<UUID> profileUuids, LinkedHashSet<String> profileNames,
+        String reason) {
+        MinecraftServer server = MinecraftServer.getServer();
+        if (server == null) {
+            return 0;
+        }
+
+        ServerConfigurationManager scm = server.getConfigurationManager();
+        if (scm == null) {
+            return 0;
+        }
+
+        LinkedHashSet<String> normalizedNames = new LinkedHashSet<>();
+        for (String profileName : profileNames) {
+            String normalized = trimToNull(profileName);
+            if (normalized != null) {
+                normalizedNames.add(normalized.toLowerCase(Locale.ROOT));
+            }
+        }
+
+        Object rawList;
+        try {
+            rawList = scm.getClass()
+                .getField("playerEntityList")
+                .get(scm);
+        } catch (Throwable ignored) {
+            return 0;
+        }
+        if (!(rawList instanceof List<?>)) {
+            return 0;
+        }
+
+        LinkedHashSet<EntityPlayerMP> toKick = new LinkedHashSet<>();
+        for (Object rawPlayer : (List<?>) rawList) {
+            if (!(rawPlayer instanceof EntityPlayerMP)) {
+                continue;
+            }
+
+            EntityPlayerMP player = (EntityPlayerMP) rawPlayer;
+            GameProfile gameProfile = player.getGameProfile();
+            UUID onlineUuid = gameProfile == null ? null : gameProfile.getId();
+            String onlineName = gameProfile == null ? trimToNull(player.getCommandSenderName())
+                : trimToNull(gameProfile.getName());
+            boolean uuidMatch = onlineUuid != null && profileUuids.contains(onlineUuid);
+            boolean nameMatch = onlineName != null && normalizedNames.contains(onlineName.toLowerCase(Locale.ROOT));
+            if (uuidMatch || nameMatch) {
+                toKick.add(player);
+            }
+        }
+
+        int kicked = 0;
+        for (EntityPlayerMP player : toKick) {
+            if (player.playerNetServerHandler == null) {
+                continue;
+            }
+            player.playerNetServerHandler.kickPlayerFromServer(reason);
+            kicked++;
+        }
+        return kicked;
     }
 
     private List<ProviderChoice> getProviderChoices() {

@@ -9,6 +9,7 @@
         sessionExpiresAt: 0,
         sessionTimer: null,
         activeView: "dashboardView",
+        profileUuidDrafts: {},
         users: [],
         configLoaded: false,
         providers: [],
@@ -22,6 +23,16 @@
 
     const el = {};
     const BLANK_AVATAR = "data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=";
+    // Glyphs from Nerd Fonts v3.4.0 css/nerd-fonts-generated.css.
+    const NERD_FONT_ICON_CODEPOINTS = {
+        key: 0xf030b,
+        image: 0xf0976,
+        trash: 0xf09e7,
+        edit: 0xf090c,
+        save: 0xf0818,
+        close: 0xf0156,
+        offline: 0xf0be7
+    };
 
     document.addEventListener("DOMContentLoaded", () => {
         cacheElements();
@@ -56,6 +67,8 @@
         el.statTexturesSize = document.getElementById("statTexturesSize");
 
         el.usersBody = document.getElementById("usersBody");
+        el.usersHead = document.getElementById("usersHead");
+        el.usersTable = document.getElementById("usersTable");
         el.userFilterInput = document.getElementById("userFilterInput");
 
         el.invitesBody = document.getElementById("invitesBody");
@@ -132,6 +145,7 @@
         el.navBar.addEventListener("click", onNavClick);
 
         el.userFilterInput.addEventListener("input", () => renderUsers(state.users));
+        el.usersBody.addEventListener("input", onUsersTableInput);
         el.usersBody.addEventListener("click", onUsersTableClick);
 
         el.inviteForm.addEventListener("submit", onCreateInvite);
@@ -727,15 +741,15 @@
             return filter.length === 0 || name.includes(filter);
         });
 
+        renderUsersHeader();
+
         if (!filtered.length) {
             el.usersBody.innerHTML = `<tr><td colspan="5" class="empty">No matching users</td></tr>`;
             return;
         }
 
         el.usersBody.innerHTML = filtered.map((user) => {
-            const profiles = (user.profiles || [])
-                .map((p) => escapeHtml(p.name || ""))
-                .join(", ");
+            const profiles = renderUserProfiles(user.profiles || []);
             const flags = [
                 user.admin ? `<span class="chip admin">admin</span>` : "",
                 user.locked ? `<span class="chip locked">locked</span>` : ""
@@ -744,19 +758,141 @@
             const username = String(user.username || "");
 
             return `<tr>
-                <td>${escapeHtml(username)}</td>
-                <td><code>${escapeHtml(uuid)}</code></td>
-                <td>${profiles || "<span class=\"empty\">none</span>"}</td>
-                <td>${flags || "<span class=\"empty\">none</span>"}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button type="button" class="small" data-action="user-reset-password" data-uuid="${escapeAttr(uuid)}" data-username="${escapeAttr(username)}">Reset Password</button>
-                        <button type="button" class="small" data-action="user-reset-textures" data-uuid="${escapeAttr(uuid)}" data-username="${escapeAttr(username)}">Reset Skin/Cape</button>
-                        <button type="button" class="small danger" data-action="user-delete" data-uuid="${escapeAttr(uuid)}" data-username="${escapeAttr(username)}">Delete</button>
+                <td data-label="Username">${escapeHtml(username)}</td>
+                <td data-label="UUID"><code class="uuid-code" title="${escapeAttr(uuid)}">${escapeHtml(uuid)}</code></td>
+                <td data-label="Profiles">${profiles}</td>
+                <td data-label="Flags">${flags || "<span class=\"empty\">none</span>"}</td>
+                <td data-label="Actions">
+                    <div class="user-action-panel">
+                        <div class="action-buttons action-icons user-actions">
+                            ${renderIconButton("user-reset-password", "Reset password", "key", {
+                                uuid,
+                                username
+                            })}
+                            ${renderIconButton("user-reset-textures", "Reset skin and cape", "image", {
+                                uuid,
+                                username
+                            })}
+                            ${renderIconButton("user-delete", "Delete user", "trash", {
+                                uuid,
+                                username
+                            }, "danger")}
+                        </div>
                     </div>
                 </td>
             </tr>`;
         }).join("");
+    }
+
+    function renderUsersHeader() {
+        el.usersHead.innerHTML = `<tr>
+            <th>Username</th>
+            <th>UUID</th>
+            <th>Profiles</th>
+            <th>Flags</th>
+            <th>Actions</th>
+        </tr>`;
+    }
+
+    function renderUserProfiles(profiles) {
+        if (!Array.isArray(profiles) || profiles.length === 0) {
+            return `<span class="empty">none</span>`;
+        }
+
+        return `<div class="profile-list">${profiles.map((profile) => {
+            const profileName = String((profile && profile.name) || "");
+            const profileUuid = String((profile && profile.uuid) || "");
+            const offlineUuid = String((profile && profile.offlineUuid) || "");
+            const draft = Object.prototype.hasOwnProperty.call(state.profileUuidDrafts, profileUuid)
+                ? state.profileUuidDrafts[profileUuid]
+                : null;
+            const editing = draft != null;
+            const draftValue = editing ? draft : profileUuid;
+            const dirty = editing && draftValue.trim() !== profileUuid;
+            const sameAsOffline = offlineUuid.length > 0 && offlineUuid === profileUuid;
+
+            return `<div class="profile-entry">
+                <div class="profile-entry-row">
+                    ${editing
+                        ? `<input type="text" class="profile-uuid-input" data-action="profile-uuid-input" data-profile-uuid="${escapeAttr(profileUuid)}" data-current-uuid="${escapeAttr(profileUuid)}" value="${escapeAttr(draftValue)}" autocomplete="off" spellcheck="false">`
+                        : `<code class="uuid-code profile-uuid-code" title="${escapeAttr(profileUuid)}">${escapeHtml(profileUuid || "-")}</code>`
+                    }
+                    ${editing
+                        ? renderIconButton("profile-save-uuid", "Save UUID", "save", {
+                            profileUuid,
+                            currentUuid: profileUuid,
+                            profileName
+                        }, dirty ? "" : "hidden")
+                        : renderIconButton("profile-start-edit-uuid", "Edit UUID", "edit", {
+                            profileUuid,
+                            currentUuid: profileUuid,
+                            profileName
+                        })
+                    }
+                    ${editing
+                        ? renderIconButton("profile-cancel-edit-uuid", "Cancel editing", "close", {
+                            profileUuid,
+                            currentUuid: profileUuid,
+                            profileName
+                        })
+                        : ""
+                    }
+                    ${renderIconButton("profile-use-offline-uuid", sameAsOffline ? "Already using offline UUID" : "Set to offline UUID", "offline", {
+                        profileUuid,
+                        currentUuid: profileUuid,
+                        profileName,
+                        offlineUuid
+                    }, sameAsOffline ? "muted" : "")}
+                </div>
+            </div>`;
+        }).join("")}</div>`;
+    }
+
+    function renderIconButton(action, title, icon, dataset, extraClass) {
+        const attrs = [`type="button"`, `class="icon-btn${extraClass ? ` ${extraClass}` : ""}"`, `data-action="${escapeAttr(action)}"`, `title="${escapeAttr(title)}"`, `aria-label="${escapeAttr(title)}"`];
+        if (dataset) {
+            Object.keys(dataset).forEach((key) => {
+                const value = dataset[key];
+                if (value == null) {
+                    return;
+                }
+                attrs.push(`data-${camelToKebab(key)}="${escapeAttr(String(value))}"`);
+            });
+        }
+        return `<button ${attrs.join(" ")}>${renderIcon(icon)}</button>`;
+    }
+
+    function renderIcon(icon) {
+        const codepoint = NERD_FONT_ICON_CODEPOINTS[icon];
+        if (!codepoint) {
+            return "";
+        }
+        return `<span class="nf-icon nf-icon-${escapeAttr(icon)}" aria-hidden="true">${String.fromCodePoint(codepoint)}</span>`;
+    }
+
+    function camelToKebab(value) {
+        return String(value).replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+    }
+
+    function onUsersTableInput(event) {
+        const input = event.target.closest("input[data-action='profile-uuid-input'][data-profile-uuid]");
+        if (!input) {
+            return;
+        }
+        const profileUuid = input.getAttribute("data-profile-uuid");
+        if (!profileUuid) {
+            return;
+        }
+        state.profileUuidDrafts[profileUuid] = input.value;
+        const currentUuid = input.getAttribute("data-current-uuid") || "";
+        const container = input.closest(".profile-entry-row");
+        if (!container) {
+            return;
+        }
+        const saveButton = container.querySelector("button[data-action='profile-save-uuid']");
+        if (saveButton) {
+            saveButton.classList.toggle("hidden", input.value.trim() === currentUuid);
+        }
     }
 
     async function onUsersTableClick(event) {
@@ -769,57 +905,138 @@
         }
 
         const action = button.getAttribute("data-action");
-        const uuid = button.getAttribute("data-uuid");
-        const username = button.getAttribute("data-username") || uuid;
-        if (!action || !uuid) {
+        if (!action) {
             return;
         }
 
         try {
-            if (action === "user-reset-password") {
-                const nextPassword = window.prompt(`Enter new password for ${username}:`, "");
-                if (nextPassword == null) {
+            if (action === "profile-start-edit-uuid" || action === "profile-save-uuid" || action === "profile-cancel-edit-uuid"
+                || action === "profile-use-offline-uuid") {
+                const profileUuid = button.getAttribute("data-profile-uuid");
+                const profileName = button.getAttribute("data-profile-name") || profileUuid;
+                const currentUuid = button.getAttribute("data-current-uuid") || "";
+                if (!profileUuid) {
                     return;
                 }
-                if (nextPassword.length === 0) {
-                    showBanner("Password cannot be empty.", "warn");
+
+                if (action === "profile-start-edit-uuid") {
+                    state.profileUuidDrafts[profileUuid] = currentUuid;
+                    renderUsers(state.users);
+                    const input = el.usersBody.querySelector(`input[data-action='profile-uuid-input'][data-profile-uuid='${profileUuid}']`);
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
                     return;
                 }
-                await requestJson(
-                    `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/reset-password`,
-                    {
-                        method: "POST",
-                        body: JSON.stringify({ newPassword: nextPassword })
-                    },
-                    true
-                );
-                showBanner(`Password reset for ${username}.`, "ok");
-            } else if (action === "user-reset-textures") {
-                if (!window.confirm(`Reset skin and cape for ${username}?`)) {
+
+                if (action === "profile-cancel-edit-uuid") {
+                    delete state.profileUuidDrafts[profileUuid];
+                    renderUsers(state.users);
                     return;
                 }
-                await requestJson(
-                    `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/reset-textures`,
-                    {
-                        method: "POST",
-                        body: "{}"
-                    },
-                    true
-                );
-                showBanner(`Skin/cape reset for ${username}.`, "ok");
-            } else if (action === "user-delete") {
-                if (!window.confirm(`Delete user ${username}? This cannot be undone.`)) {
+
+                if (action === "profile-save-uuid") {
+                    const nextUuid = String(state.profileUuidDrafts[profileUuid] || "").trim();
+                    if (nextUuid.length === 0) {
+                        showBanner("UUID cannot be empty.", "warn");
+                        return;
+                    }
+
+                    const response = await requestJson(
+                        `/api/wawelauth/admin/profiles/${encodeURIComponent(profileUuid)}/set-uuid`,
+                        {
+                            method: "POST",
+                            body: JSON.stringify({ newUuid: nextUuid })
+                        },
+                        true
+                    );
+                    delete state.profileUuidDrafts[profileUuid];
+
+                    if (response && response.changed) {
+                        showBanner(
+                            `Updated UUID for ${profileName} to ${response.newUuid}. Kicked ${Number(response.kickedPlayers) || 0} player(s) and invalidated ${Number(response.invalidatedTokens) || 0} token(s).`,
+                            "ok"
+                        );
+                    } else {
+                        showBanner(`${profileName} is already using ${(response && response.newUuid) || currentUuid}.`, "warn");
+                    }
+                } else {
+                    if (!window.confirm(`Set ${profileName} to its offline UUID? This will kick the player and invalidate all tokens for that local account.`)) {
+                        return;
+                    }
+
+                    const response = await requestJson(
+                        `/api/wawelauth/admin/profiles/${encodeURIComponent(profileUuid)}/use-offline-uuid`,
+                        {
+                            method: "POST",
+                            body: "{}"
+                        },
+                        true
+                    );
+                    delete state.profileUuidDrafts[profileUuid];
+
+                    if (response && response.changed) {
+                        showBanner(
+                            `Set ${profileName} to offline UUID ${response.newUuid}. Kicked ${Number(response.kickedPlayers) || 0} player(s) and invalidated ${Number(response.invalidatedTokens) || 0} token(s).`,
+                            "ok"
+                        );
+                    } else {
+                        showBanner(`${profileName} is already using its offline UUID.`, "warn");
+                    }
+                }
+            } else {
+                const uuid = button.getAttribute("data-uuid");
+                const username = button.getAttribute("data-username") || uuid;
+                if (!uuid) {
                     return;
                 }
-                await requestJson(
-                    `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/delete`,
-                    {
-                        method: "POST",
-                        body: "{}"
-                    },
-                    true
-                );
-                showBanner(`Deleted user ${username}.`, "ok");
+
+                if (action === "user-reset-password") {
+                    const nextPassword = window.prompt(`Enter new password for ${username}:`, "");
+                    if (nextPassword == null) {
+                        return;
+                    }
+                    if (nextPassword.length === 0) {
+                        showBanner("Password cannot be empty.", "warn");
+                        return;
+                    }
+                    await requestJson(
+                        `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/reset-password`,
+                        {
+                            method: "POST",
+                            body: JSON.stringify({ newPassword: nextPassword })
+                        },
+                        true
+                    );
+                    showBanner(`Password reset for ${username}.`, "ok");
+                } else if (action === "user-reset-textures") {
+                    if (!window.confirm(`Reset skin and cape for ${username}?`)) {
+                        return;
+                    }
+                    await requestJson(
+                        `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/reset-textures`,
+                        {
+                            method: "POST",
+                            body: "{}"
+                        },
+                        true
+                    );
+                    showBanner(`Skin/cape reset for ${username}.`, "ok");
+                } else if (action === "user-delete") {
+                    if (!window.confirm(`Delete user ${username}? This cannot be undone.`)) {
+                        return;
+                    }
+                    await requestJson(
+                        `/api/wawelauth/admin/users/${encodeURIComponent(uuid)}/delete`,
+                        {
+                            method: "POST",
+                            body: "{}"
+                        },
+                        true
+                    );
+                    showBanner(`Deleted user ${username}.`, "ok");
+                }
             }
 
             await refreshData(false);
@@ -1428,6 +1645,8 @@
     }
 
     function clearTables() {
+        state.profileUuidDrafts = {};
+        renderUsersHeader();
         el.usersBody.innerHTML = `<tr><td colspan="5" class="empty">Not loaded</td></tr>`;
         el.invitesBody.innerHTML = `<tr><td colspan="4" class="empty">Not loaded</td></tr>`;
         el.opsBody.innerHTML = `<tr><td colspan="5" class="empty">Not loaded</td></tr>`;

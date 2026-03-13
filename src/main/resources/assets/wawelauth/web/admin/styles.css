@@ -1,3 +1,11 @@
+@font-face {
+    font-family: "Wawel Nerd Symbols";
+    src: url("./fonts/nerd-fonts/SymbolsNerdFont-Subset.woff2") format("woff2");
+    font-weight: normal;
+    font-style: normal;
+    font-display: block;
+}
+
 :root {
     --bg: #090d1a;
     --panel: rgba(16, 24, 46, 0.86);
@@ -263,6 +271,10 @@ button.small {
 }
 
 .users-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
     margin-bottom: 0.65rem;
 }
 
@@ -322,6 +334,122 @@ tbody tr:hover {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem;
+}
+
+.users-table {
+    table-layout: fixed;
+}
+
+.users-table th:nth-child(1) {
+    width: 14%;
+}
+
+.users-table th:nth-child(2) {
+    width: 21%;
+}
+
+.users-table th:nth-child(3) {
+    width: 39%;
+}
+
+.users-table th:nth-child(4) {
+    width: 8%;
+}
+
+.users-table th:nth-child(5) {
+    width: 18%;
+}
+
+.uuid-code {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: top;
+}
+
+.profile-list {
+    display: grid;
+    gap: 0.42rem;
+}
+
+.profile-entry {
+    display: block;
+    padding: 0.45rem 0.52rem;
+    border: 1px solid rgba(111, 140, 213, 0.22);
+    border-radius: 10px;
+    background: rgba(8, 13, 30, 0.34);
+}
+
+.profile-entry-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+.profile-entry-row .uuid-code,
+.profile-entry-row input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.profile-uuid-input {
+    min-width: 0;
+    padding: 0.38rem 0.55rem;
+    font-size: 0.84rem;
+}
+
+.profile-uuid-code {
+    font-size: 0.8rem;
+}
+
+.user-action-panel {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+.user-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+    padding-bottom: 0.1rem;
+}
+
+.action-icons {
+    gap: 0.4rem;
+}
+
+.icon-btn {
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.icon-btn:hover,
+.icon-btn:active {
+    transform: none;
+}
+
+.icon-btn .nf-icon {
+    font-family: "Wawel Nerd Symbols", sans-serif;
+    font-size: 1.05rem;
+    line-height: 1;
+    font-weight: normal;
+    font-style: normal;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-btn.muted {
+    opacity: 0.55;
 }
 
 .chip {
@@ -591,5 +719,92 @@ code {
     .toolbar {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+@media (max-width: 1120px) {
+    #usersView .table-wrap {
+        border: 0;
+        background: transparent;
+        max-height: none;
+        overflow: visible;
+    }
+
+    #usersView .users-table,
+    #usersView .users-table tbody,
+    #usersView .users-table tr,
+    #usersView .users-table td {
+        display: block;
+        width: 100%;
+    }
+
+    #usersView .users-table thead {
+        display: none;
+    }
+
+    #usersView .users-table tbody {
+        display: grid;
+        gap: 0.8rem;
+    }
+
+    #usersView .users-table tbody tr {
+        border: 1px solid rgba(111, 140, 213, 0.28);
+        border-radius: 12px;
+        background: rgba(10, 16, 35, 0.68);
+        overflow: hidden;
+    }
+
+    #usersView .users-table tbody td {
+        display: grid;
+        grid-template-columns: minmax(6.2rem, 7.2rem) minmax(0, 1fr);
+        gap: 0.55rem;
+        align-items: start;
+        padding: 0.58rem 0.75rem;
+        border-bottom: 1px solid rgba(111, 140, 213, 0.12);
+    }
+
+    #usersView .users-table tbody td:last-child {
+        border-bottom: 0;
+    }
+
+    #usersView .users-table tbody td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        line-height: 1.35;
+        padding-top: 0.12rem;
+    }
+
+    #usersView .user-action-panel,
+    #usersView .user-actions {
+        width: 100%;
+    }
+
+    #usersView .user-actions {
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    #usersView .profile-entry-row {
+        flex-wrap: wrap;
+    }
+
+    #usersView .profile-entry-row .uuid-code,
+    #usersView .profile-entry-row input {
+        min-width: min(100%, 16rem);
+    }
+}
+
+@media (max-width: 680px) {
+    #usersView .users-table tbody td {
+        grid-template-columns: 1fr;
+        gap: 0.35rem;
+    }
+
+    #usersView .users-table tbody td::before {
+        padding-top: 0;
     }
 }
