@@ -8,16 +8,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
-import net.minecraft.client.renderer.ThreadDownloadImageData;
 import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.client.render.ProviderThreadDownloadImageData;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelBuilder;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelCube;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelSurfaceBuilder;
-import org.fentanylsolutions.wawelauth.mixins.early.minecraft.AccessorThreadDownloadImageData;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 
 import com.mojang.authlib.GameProfile;
@@ -217,8 +216,8 @@ public class SkinLayers3DSetup {
         ITextureObject texture = Minecraft.getMinecraft()
             .getTextureManager()
             .getTexture(skinLocation);
-        if (texture instanceof ThreadDownloadImageData) {
-            return ((AccessorThreadDownloadImageData) texture).wawelauth$getBufferedImage();
+        if (texture instanceof ProviderThreadDownloadImageData providerImageData) {
+            return providerImageData.bufferedImage;
         }
         return null;
     }

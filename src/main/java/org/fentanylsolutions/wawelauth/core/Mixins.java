@@ -137,10 +137,6 @@ public class Mixins extends FentMixins {
             .build();
 
         // Client Mixins: 3D skin layers
-        registry.mixin("AccessorThreadDownloadImageData")
-            .phase(MixinUtil.Phase.EARLY)
-            .side(MiscUtil.Side.CLIENT)
-            .build();
         registry.mixin("MixinTileEntitySkullRenderer")
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)

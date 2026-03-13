@@ -35,7 +35,7 @@ public class ProviderThreadDownloadImageData extends SimpleTexture {
     private final IImageBuffer imageBuffer;
     private final ProviderProxySettings proxySettings;
     private final String providerName;
-    private BufferedImage bufferedImage;
+    public BufferedImage bufferedImage;
     private Thread imageThread;
     private boolean textureUploaded;
 
