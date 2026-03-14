@@ -39,6 +39,7 @@ public class WawelServer {
     private final TokenDAO tokenDAO;
     private final InviteDAO inviteDAO;
     private final AdminPlayerListProviderBindingDAO adminPlayerListProviderBindingDAO;
+    private final PublicPageService publicPageService;
 
     private WawelServer(File stateDir) {
         WawelAuth.LOG.info("Starting Wawel Auth server module...");
@@ -105,6 +106,7 @@ public class WawelServer {
             tokenDAO,
             inviteDAO,
             adminPlayerListProviderBindingDAO);
+        publicPageService = new PublicPageService(config);
 
         // Router
         router = new HttpRouter();
@@ -120,6 +122,7 @@ public class WawelServer {
             profileDAO,
             textureFileStore);
         adminWebService.registerRoutes(router);
+        publicPageService.registerRoutes(router);
 
         WawelAuth.LOG.info(
             "WawelAuth server module started. Public key: {}...{}",
@@ -165,6 +168,10 @@ public class WawelServer {
     public String getApiLocationHeaderValue() {
         String prefix = serverConfig.getApiRoutePrefix();
         return prefix.isEmpty() ? "/" : prefix;
+    }
+
+    public void refreshPublicPageCaches() {
+        publicPageService.refreshAllCaches();
     }
 
     public KeyManager getKeyManager() {

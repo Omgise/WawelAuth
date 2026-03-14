@@ -32,6 +32,8 @@ public class ServerConfig {
      * Used to construct texture URLs and the ALI metadata response.
      */
     private String apiRoot = "";
+    private String publicPagePath = "/";
+    private String publicInfoApiPath = "__server-info";
 
     /**
      * Domains from which clients should accept texture URLs.
@@ -74,6 +76,39 @@ public class ServerConfig {
 
     public void setApiRoot(String apiRoot) {
         this.apiRoot = apiRoot;
+    }
+
+    /**
+     * Public landing page mount path.
+     *
+     * Examples:
+     * - "" -> "/"
+     * - "/" -> "/"
+     * - "/info" -> "/info"
+     * - "/info/" -> "/info"
+     */
+    public String getPublicPagePath() {
+        return normalizePublicPagePath(publicPagePath);
+    }
+
+    public void setPublicPagePath(String publicPagePath) {
+        this.publicPagePath = publicPagePath;
+    }
+
+    /**
+     * Public server-info API path consumed by the default landing page.
+     *
+     * Empty disables the endpoint entirely.
+     *
+     * Relative paths are resolved under {@link #getPublicPagePath()} so the
+     * bundled static page can call it directly.
+     */
+    public String getPublicInfoApiPath() {
+        return normalizePublicInfoApiPath(publicInfoApiPath, getPublicPagePath());
+    }
+
+    public void setPublicInfoApiPath(String publicInfoApiPath) {
+        this.publicInfoApiPath = publicInfoApiPath;
     }
 
     /**
@@ -175,6 +210,46 @@ public class ServerConfig {
         } catch (Exception ignored) {
             return normalizePathPrefix(raw);
         }
+    }
+
+    public static String normalizePublicPagePath(String rawPath) {
+        String path = rawPath == null ? "" : rawPath.trim();
+        if (path.isEmpty() || "/".equals(path)) {
+            return "/";
+        }
+        if (!path.startsWith("/")) {
+            path = "/" + path;
+        }
+        while (path.endsWith("/") && path.length() > 1) {
+            path = path.substring(0, path.length() - 1);
+        }
+        return path.isEmpty() ? "/" : path;
+    }
+
+    public static String normalizePublicInfoApiPath(String rawPath, String publicPagePath) {
+        String path = rawPath == null ? "" : rawPath.trim();
+        if (path.isEmpty()) {
+            return "";
+        }
+        if (path.startsWith("/")) {
+            return normalizePublicPagePath(path);
+        }
+
+        while (path.startsWith("./")) {
+            path = path.substring(2);
+        }
+        while (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        while (path.endsWith("/") && !path.isEmpty()) {
+            path = path.substring(0, path.length() - 1);
+        }
+        if (path.isEmpty()) {
+            return "";
+        }
+
+        String base = normalizePublicPagePath(publicPagePath);
+        return "/".equals(base) ? "/" + path : base + "/" + path;
     }
 
     private static String normalizePathPrefix(String rawPath) {

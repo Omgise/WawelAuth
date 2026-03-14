@@ -1,0 +1,124 @@
+<!-- WAWEL_AUTH_DEFAULT_PUBLIC_PAGE -->
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Wawel Auth Server</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script defer src="./app.js"></script>
+</head>
+
+<body>
+    <div class="bg-blur bg-blur-a"></div>
+    <div class="bg-blur bg-blur-b"></div>
+
+    <main class="page">
+        <section class="card hero">
+            <div class="hero-corner-actions">
+                <a class="btn icon-btn hidden" id="adminButton" href="/admin">
+                    <span class="nf-icon" aria-hidden="true">&#xf030b;</span>
+                    <span>Admin Panel</span>
+                </a>
+                <a class="btn icon-btn alt hidden" id="dynmapButton" href="/dynmap">
+                    <span class="nf-icon" aria-hidden="true">&#xf1418;</span>
+                    <span>Dynmap</span>
+                </a>
+            </div>
+
+            <div class="hero-art">
+                <div class="icon-wrap" id="iconWrap" title="">
+                    <img id="serverIcon" src="./pack-fallback.png" alt="Server icon">
+                </div>
+            </div>
+
+            <div class="hero-copy">
+                <h1 id="serverName">Wawel Auth Server</h1>
+                <p class="label hero-label">MOTD</p>
+                <p class="sub motd-line" id="motdLine">Minecraft Server</p>
+                <p class="desc hidden" id="serverDescription"></p>
+
+                <div class="hero-meta">
+                    <span class="pill" id="playerCountPill">Players: 0 / ?</span>
+                    <span class="pill" id="minecraftVersionPill">Minecraft 1.7.10</span>
+                </div>
+
+                <div class="actions">
+                    <a class="btn alt hidden" id="homepageButton" href="#" target="_blank" rel="noreferrer">Homepage</a>
+                    <a class="btn hidden" id="registerButton" href="#" target="_blank" rel="noreferrer">Register</a>
+                </div>
+            </div>
+        </section>
+
+        <section class="layout">
+            <div class="stack">
+                <article class="card section">
+                    <p class="section-title">How to Connect</p>
+                    <div class="connect">
+                        <div class="connect-card">
+                            <h3>Wawel Auth Client</h3>
+                            <p>
+                                Install the Wawel Auth mod on your client, pick the matching account, and connect to the
+                                Minecraft server normally.
+                            </p>
+                        </div>
+                        <div class="connect-card">
+                            <h3>authlib-injector</h3>
+                            <p id="authlibText">
+                                This server has not configured a public API root yet.
+                            </p>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="card section">
+                    <p class="section-title">Allowed Fallbacks</p>
+                    <div class="fallback-list hidden" id="fallbackList"></div>
+                    <p class="muted" id="fallbackEmpty">No fallback providers are configured.</p>
+                </article>
+
+                <article class="card section">
+                    <p class="section-title">Installed Mods</p>
+                    <div class="modlist-widget">
+                        <button type="button" class="modlist-toggle" id="modlistToggle" aria-expanded="false">
+                            <span class="fallback-arrow">></span>
+                            <span>Installed modlist</span>
+                            <span class="modlist-count" id="modlistCount">0 mods</span>
+                        </button>
+                        <div class="modlist hidden" id="modlist"></div>
+                    </div>
+                </article>
+            </div>
+
+            <div class="stack">
+                <article class="card section">
+                    <p class="section-title">Additional Info</p>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <p class="label">Registration</p>
+                            <div class="value" id="registrationPolicy">Invite Only</div>
+                            <p class="muted" id="registrationDescription">Registration requires a valid invite token.</p>
+                        </div>
+                        <div class="stat-card">
+                            <p class="label">API Root</p>
+                            <div class="value value-wrap" id="apiRootValue">Not configured</div>
+                            <p class="muted" id="apiRootDescription">Required for authlib-injector and public API discovery.</p>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <img class="footer-logo" src="./logo-dragon-outline.png" alt="Wawel Auth logo">
+            <span class="footer-textline">
+                <span id="footerImplementationName">Wawel Auth</span>
+                <span>version</span>
+                <span id="footerVersion">unknown</span>
+            </span>
+        </footer>
+    </main>
+</body>
+
+</html>

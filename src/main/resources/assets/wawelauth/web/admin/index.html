@@ -123,7 +123,19 @@
                             <label for="cfgApiRoot">API Root</label>
                             <input id="cfgApiRoot" type="text" placeholder="http://host:25565/auth">
                             <p class="muted field-note">
-                                The path part of <code>apiRoot</code> is the auth API mount point. Use a path like <code>/auth</code> to reserve <code>/</code> for the public page.
+                                The path part of <code>apiRoot</code> is the auth API mount point. Use a path like <code>/auth</code> for authlib-injector metadata and endpoints.
+                            </p>
+
+                            <label for="cfgPublicPagePath">Public Page Path</label>
+                            <input id="cfgPublicPagePath" type="text" placeholder="/">
+                            <p class="muted field-note">
+                                Custom public-site files are snapshotted from the Wawel Auth config directory on startup. If no top-level <code>index.htm</code> exists there, the bundled public page is copied into that directory first.
+                            </p>
+
+                            <label for="cfgPublicInfoApiPath">Public Info API Path</label>
+                            <input id="cfgPublicInfoApiPath" type="text" placeholder="__server-info">
+                            <p class="muted field-note">
+                                Exposes cached public server information for the landing page. Leave empty to disable it entirely. Relative paths are resolved under the public page path.
                             </p>
 
                             <label for="cfgImplementationName">Implementation Name</label>

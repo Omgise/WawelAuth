@@ -1,6 +1,5 @@
 package org.fentanylsolutions.wawelauth.wawelserver;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,9 +28,6 @@ public final class YggdrasilRoutes {
         SessionService sessionService, FallbackProxyService fallbackProxyService, TextureService textureService,
         ProfileService profileService, ProfileDAO profileDAO, TextureFileStore textureFileStore) {
         String prefix = config.getApiRoutePrefix();
-        if (!prefix.isEmpty()) {
-            router.get("/", ctx -> buildLandingPage(config, prefix));
-        }
 
         // GET apiRoot path: API metadata
         router.get(route(prefix, "/"), ctx -> buildMetadata(config, keyManager));
@@ -147,90 +143,6 @@ public final class YggdrasilRoutes {
         return prefix + path;
     }
 
-    private static BinaryResponse buildLandingPage(ServerConfig config, String apiPrefix) {
-        String serverName = escapeHtml(config.getServerName());
-        String implementationName = escapeHtml(
-            config.getMeta()
-                .getImplementationName());
-        String description = escapeHtml(
-            config.getMeta()
-                .getPublicDescription());
-        String apiRoot = escapeHtml(config.getApiRoot());
-        String homepage = trimToNull(
-            config.getMeta()
-                .getServerHomepage());
-        String register = trimToNull(
-            config.getMeta()
-                .getServerRegister());
-
-        StringBuilder html = new StringBuilder(2048);
-        html.append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">")
-            .append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")
-            .append("<title>")
-            .append(serverName)
-            .append("</title><style>")
-            .append("body{margin:0;font-family:Segoe UI,Inter,sans-serif;background:#0b1120;color:#ecf2ff;")
-            .append("background-image:radial-gradient(circle at 20% 10%,#20305f 0,transparent 44%),")
-            .append(
-                "radial-gradient(circle at 85% 20%,#184970 0,transparent 35%),linear-gradient(160deg,#070b15 0,#0d1328 55%,#0a0e1d 100%);}")
-            .append(".page{max-width:860px;margin:0 auto;padding:48px 20px 40px;}")
-            .append(".card{background:rgba(10,18,40,.86);border:1px solid rgba(107,140,230,.34);border-radius:18px;")
-            .append("box-shadow:0 12px 38px rgba(4,10,20,.42);padding:28px 30px;}")
-            .append("h1{margin:0 0 8px;font-size:2rem}.sub{margin:0;color:#a9b9df;font-size:1.02rem}")
-            .append(
-                "p{line-height:1.65;color:#d9e3ff}code{background:rgba(255,255,255,.08);padding:.16rem .38rem;border-radius:7px}")
-            .append(
-                ".actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}.btn{display:inline-flex;align-items:center;")
-            .append(
-                "padding:.72rem 1rem;border-radius:12px;border:1px solid rgba(104,143,236,.52);color:#ecf2ff;text-decoration:none;")
-            .append("background:linear-gradient(160deg,rgba(33,57,117,.95) 0,rgba(16,32,72,.98) 100%)}")
-            .append(
-                ".btn.alt{background:transparent}.meta{margin-top:20px;color:#a9b9df;font-size:.95rem}</style></head><body><main class=\"page\">")
-            .append("<section class=\"card\"><h1>")
-            .append(serverName)
-            .append("</h1><p class=\"sub\">")
-            .append(implementationName)
-            .append("</p>");
-
-        if (!description.isEmpty()) {
-            html.append("<p>")
-                .append(description.replace("\n", "<br>"))
-                .append("</p>");
-        }
-
-        html.append("<p class=\"meta\">Authentication API root: <code>")
-            .append(apiRoot)
-            .append("</code> (mounted at <code>")
-            .append(escapeHtml(apiPrefix))
-            .append("</code>)</p>");
-
-        if (homepage != null || register != null) {
-            html.append("<div class=\"actions\">");
-            if (homepage != null) {
-                html.append("<a class=\"btn alt\" href=\"")
-                    .append(escapeHtml(homepage))
-                    .append("\">Homepage</a>");
-            }
-            if (register != null) {
-                html.append("<a class=\"btn\" href=\"")
-                    .append(escapeHtml(register))
-                    .append("\">Register</a>");
-            }
-            html.append("</div>");
-        }
-
-        html.append("</section></main></body></html>");
-
-        Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Cache-Control", "no-store");
-        headers.put("Pragma", "no-cache");
-        return new BinaryResponse(
-            html.toString()
-                .getBytes(StandardCharsets.UTF_8),
-            "text/html; charset=utf-8",
-            headers);
-    }
-
     private static Map<String, Object> buildMetadata(ServerConfig config, KeyManager keyManager) {
         Map<String, Object> root = new LinkedHashMap<>();
 
@@ -318,21 +230,4 @@ public final class YggdrasilRoutes {
         }
     }
 
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private static String escapeHtml(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;");
-    }
 }
