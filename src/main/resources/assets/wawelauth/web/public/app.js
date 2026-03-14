@@ -4,6 +4,7 @@
 
     const PUBLIC_INFO_URL = "__WAWEL_PUBLIC_INFO_API_PATH__";
     const REQUEST_TIMEOUT_MS = 3500;
+    const REFRESH_INTERVAL_MS = 30000;
     const FALLBACK_ICON_URL = "./pack-fallback.png";
 
     document.addEventListener("DOMContentLoaded", init);
@@ -16,6 +17,13 @@
             return;
         }
 
+        await refresh(el);
+        window.setInterval(function () {
+            refresh(el);
+        }, REFRESH_INTERVAL_MS);
+    }
+
+    async function refresh(el) {
         try {
             const data = await fetchJsonWithTimeout(PUBLIC_INFO_URL, REQUEST_TIMEOUT_MS);
             render(el, data || {});
@@ -44,6 +52,8 @@
             apiRootDescription: document.getElementById("apiRootDescription"),
             fallbackList: document.getElementById("fallbackList"),
             fallbackEmpty: document.getElementById("fallbackEmpty"),
+            playerList: document.getElementById("playerList"),
+            playerListEmpty: document.getElementById("playerListEmpty"),
             modlistToggle: document.getElementById("modlistToggle"),
             modlistCount: document.getElementById("modlistCount"),
             modlist: document.getElementById("modlist"),
@@ -90,6 +100,7 @@
         const icons = data && data.icons ? data.icons : {};
         const registration = server && server.registration ? server.registration : {};
         const fallbacks = Array.isArray(server.fallbacks) ? server.fallbacks.filter(Boolean) : [];
+        const connectedPlayers = Array.isArray(server.connectedPlayers) ? server.connectedPlayers.filter(Boolean) : [];
         const modlist = Array.isArray(data.modlist) ? data.modlist.filter(Boolean) : [];
 
         const serverName = nonEmpty(server.name) || "Wawel Auth Server";
@@ -140,6 +151,7 @@
         configureLink(el.adminButton, nonEmpty(links.admin));
         configureLink(el.dynmapButton, nonEmpty(links.dynmap));
         renderFallbacks(el, fallbacks);
+        renderConnectedPlayers(el, connectedPlayers);
         renderModlist(el, modlist);
         configureIcon(el, icons);
     }
@@ -160,6 +172,9 @@
         el.apiRootDescription.textContent = "Public server information could not be loaded.";
         el.fallbackList.classList.add("hidden");
         el.fallbackEmpty.classList.remove("hidden");
+        el.playerList.classList.add("hidden");
+        el.playerListEmpty.classList.remove("hidden");
+        el.playerList.innerHTML = "";
         renderModlist(el, []);
     }
 
@@ -257,6 +272,42 @@
         }
         anchor.href = url;
         anchor.classList.remove("hidden");
+    }
+
+    function renderConnectedPlayers(el, players) {
+        el.playerList.innerHTML = "";
+
+        if (!players.length) {
+            el.playerList.classList.add("hidden");
+            el.playerListEmpty.classList.remove("hidden");
+            return;
+        }
+
+        el.playerListEmpty.classList.add("hidden");
+        el.playerList.classList.remove("hidden");
+
+        players.forEach(function (player) {
+            const name = nonEmpty(player && player.name) || "Unknown Player";
+            const avatarUrl = nonEmpty(player && player.avatarUrl);
+
+            const row = document.createElement("div");
+            row.className = "player-entry";
+
+            const avatar = document.createElement("img");
+            avatar.className = "player-avatar";
+            avatar.alt = name + " head";
+            avatar.loading = "lazy";
+            avatar.src = avatarUrl || FALLBACK_ICON_URL;
+
+            const text = document.createElement("div");
+            text.className = "player-name";
+            text.textContent = name;
+            text.title = name;
+
+            row.appendChild(avatar);
+            row.appendChild(text);
+            el.playerList.appendChild(row);
+        });
     }
 
     function renderModlist(el, modlist) {

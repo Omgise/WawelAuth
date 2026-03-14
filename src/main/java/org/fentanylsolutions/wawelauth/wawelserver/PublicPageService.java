@@ -16,7 +16,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
 
 import org.fentanylsolutions.wawelauth.Config;
@@ -24,8 +28,12 @@ import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.wawelcore.config.FallbackServer;
 import org.fentanylsolutions.wawelauth.wawelcore.config.RegistrationPolicy;
 import org.fentanylsolutions.wawelauth.wawelcore.config.ServerConfig;
+import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
+import org.fentanylsolutions.wawelauth.wawelcore.data.WawelProfile;
 import org.fentanylsolutions.wawelauth.wawelnet.BinaryResponse;
 import org.fentanylsolutions.wawelauth.wawelnet.HttpRouter;
+
+import com.mojang.authlib.GameProfile;
 
 import cpw.mods.fml.common.Loader;
 import cpw.mods.fml.common.ModContainer;
@@ -43,10 +51,13 @@ public final class PublicPageService {
     private static final String SITE_DIR_NAME = "public-page";
     private static final String ICON_PNG_NAME = "__server-icon.png";
     private static final String ICON_GIF_NAME = "__server-icon.gif";
+    private static final String PLAYER_AVATAR_NAME = "__player-avatar.png";
     private static final String PUBLIC_INFO_API_PATH_TOKEN = "__WAWEL_PUBLIC_INFO_API_PATH__";
     private static final int PUBLIC_INFO_API_VERSION = 1;
     private static final int LIVE_STATUS_CACHE_TTL_SECONDS = 5;
     private static final long LIVE_STATUS_CACHE_TTL_MS = LIVE_STATUS_CACHE_TTL_SECONDS * 1000L;
+    private static final int MAX_HTTP_BYTES = 4_194_304;
+    private static final long PLAYER_AVATAR_CACHE_TTL_MS = 30_000L;
 
     private static final List<ManagedSeedResource> MANAGED_TEMPLATE_RESOURCES;
     private static final Map<String, String> STATIC_SEED_RESOURCES;
@@ -74,7 +85,7 @@ public final class PublicPageService {
     private final File siteDir;
     private volatile Map<String, FrozenAsset> frozenAssets = Collections.emptyMap();
     private volatile StaticPublicInfo staticPublicInfo;
-
+    private final ConcurrentMap<String, CachedAvatar> playerAvatarCache = new ConcurrentHashMap<>();
     private volatile CachedLiveStatus cachedLiveStatus;
 
     public PublicPageService(ServerConfig serverConfig) {
@@ -101,6 +112,7 @@ public final class PublicPageService {
         }
         router.get(joinRoute(publicPath, ICON_PNG_NAME), ctx -> serveServerIconPng());
         router.get(joinRoute(publicPath, ICON_GIF_NAME), ctx -> serveServerIconGif());
+        router.get(joinRoute(publicPath, PLAYER_AVATAR_NAME), ctx -> servePlayerAvatar(ctx.getQueryParam("uuid")));
 
         for (String routePath : new ArrayList<>(frozenAssets.keySet())) {
             router.get(routePath, ctx -> serveFrozenAsset(routePath));
@@ -112,6 +124,7 @@ public final class PublicPageService {
         this.frozenAssets = Collections.unmodifiableMap(snapshotPublicSite(siteDir));
         this.staticPublicInfo = buildStaticPublicInfo();
         this.cachedLiveStatus = null;
+        this.playerAvatarCache.clear();
     }
 
     private void warnOnOverlaps() {
@@ -148,8 +161,8 @@ public final class PublicPageService {
             staticInfo = staticPublicInfo;
         }
 
-        int playersOnline = resolveCachedPlayersOnline(now);
-        String json = JsonSupport.toJson(buildPublicInfoPayload(now, staticInfo, playersOnline));
+        CachedLiveStatus liveStatus = resolveCachedLiveStatus(now);
+        String json = JsonSupport.toJson(buildPublicInfoPayload(now, staticInfo, liveStatus));
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Cache-Control", "public, max-age=" + LIVE_STATUS_CACHE_TTL_SECONDS);
         headers.put("X-Wawel-Public-Info-Version", String.valueOf(PUBLIC_INFO_API_VERSION));
@@ -182,6 +195,29 @@ public final class PublicPageService {
         return cacheableBinary(iconBytes, "image/gif");
     }
 
+    private BinaryResponse servePlayerAvatar(String uuidRaw) {
+        UUID uuid = parseUuidFlexible(uuidRaw);
+        if (uuid == null) {
+            return textResponse("Connected player avatar not found.");
+        }
+
+        String uuidUnsigned = UuidUtil.toUnsigned(uuid);
+        CachedAvatar cached = playerAvatarCache.get(uuidUnsigned);
+        long now = System.currentTimeMillis();
+        if (cached != null && cached.expiresAtMs > now) {
+            return buildAvatarResponse(cached.pngBytes);
+        }
+        playerAvatarCache.remove(uuidUnsigned);
+
+        byte[] pngBytes = renderConnectedPlayerAvatar(uuid);
+        if (pngBytes == null) {
+            return textResponse("Connected player avatar not found.");
+        }
+
+        playerAvatarCache.put(uuidUnsigned, new CachedAvatar(pngBytes, now + PLAYER_AVATAR_CACHE_TTL_MS));
+        return buildAvatarResponse(pngBytes);
+    }
+
     private BinaryResponse textResponse(String message) {
         Map<String, String> headers = new LinkedHashMap<>();
         headers.put("Cache-Control", "no-store");
@@ -195,21 +231,21 @@ public final class PublicPageService {
         return new BinaryResponse(bytes, contentType, headers);
     }
 
-    private int resolveCachedPlayersOnline(long now) {
+    private CachedLiveStatus resolveCachedLiveStatus(long now) {
         CachedLiveStatus cached = cachedLiveStatus;
         if (cached != null && cached.expiresAtMs > now) {
-            return cached.playersOnline;
+            return cached;
         }
 
         synchronized (this) {
             cached = cachedLiveStatus;
             if (cached != null && cached.expiresAtMs > now) {
-                return cached.playersOnline;
+                return cached;
             }
 
-            int playersOnline = resolvePlayersOnline();
-            cachedLiveStatus = new CachedLiveStatus(playersOnline, now + LIVE_STATUS_CACHE_TTL_MS);
-            return playersOnline;
+            List<Map<String, Object>> connectedPlayers = resolveConnectedPlayers();
+            cachedLiveStatus = new CachedLiveStatus(connectedPlayers, now + LIVE_STATUS_CACHE_TTL_MS);
+            return cachedLiveStatus;
         }
     }
 
@@ -248,7 +284,8 @@ public final class PublicPageService {
             readExistingFileBytes(resolveServerDirectoryFile("server-icon.gif")));
     }
 
-    private Map<String, Object> buildPublicInfoPayload(long now, StaticPublicInfo staticInfo, int playersOnline) {
+    private Map<String, Object> buildPublicInfoPayload(long now, StaticPublicInfo staticInfo,
+        CachedLiveStatus liveStatus) {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("apiVersion", Integer.valueOf(PUBLIC_INFO_API_VERSION));
         out.put("generatedAt", Long.valueOf(now));
@@ -264,8 +301,9 @@ public final class PublicPageService {
         server.put("name", staticInfo.serverName);
         server.put("description", staticInfo.description);
         server.put("motd", staticInfo.motd);
-        server.put("playersOnline", Integer.valueOf(playersOnline));
+        server.put("playersOnline", Integer.valueOf(liveStatus.playersOnline));
         server.put("maxPlayers", staticInfo.maxPlayers);
+        server.put("connectedPlayers", liveStatus.connectedPlayers);
 
         Map<String, Object> registration = new LinkedHashMap<>();
         registration.put("id", staticInfo.registrationId);
@@ -423,6 +461,7 @@ public final class PublicPageService {
     private boolean isReservedRoute(String routePath) {
         return routePath.equals(joinRoute(publicPath, ICON_PNG_NAME))
             || routePath.equals(joinRoute(publicPath, ICON_GIF_NAME))
+            || routePath.equals(joinRoute(publicPath, PLAYER_AVATAR_NAME))
             || (!publicInfoApiPath.isEmpty() && routePath.equals(publicInfoApiPath));
     }
 
@@ -524,29 +563,111 @@ public final class PublicPageService {
         }
     }
 
-    private static int resolvePlayersOnline() {
+    private List<Map<String, Object>> resolveConnectedPlayers() {
+        List<Map<String, Object>> rows = new ArrayList<>();
         Object configManager = null;
         MinecraftServer server = MinecraftServer.getServer();
         if (server != null) {
             configManager = server.getConfigurationManager();
         }
-        Integer live = invokeInteger(configManager, "getCurrentPlayerCount", "func_72394_k");
-        if (live != null && live.intValue() >= 0) {
-            return live.intValue();
-        }
-
         if (configManager == null) {
-            return 0;
+            return rows;
         }
         try {
             Object rawList = configManager.getClass()
                 .getField("playerEntityList")
                 .get(configManager);
             if (rawList instanceof List<?>) {
-                return ((List<?>) rawList).size();
+                for (Object rawPlayer : (List<?>) rawList) {
+                    if (!(rawPlayer instanceof EntityPlayerMP)) {
+                        continue;
+                    }
+                    EntityPlayerMP player = (EntityPlayerMP) rawPlayer;
+                    GameProfile profile = player.getGameProfile();
+                    if (profile == null || profile.getId() == null) {
+                        continue;
+                    }
+
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put(
+                        "uuid",
+                        profile.getId()
+                            .toString());
+                    row.put("name", trimToNull(profile.getName()));
+                    row.put(
+                        "avatarUrl",
+                        joinRoute(publicPath, PLAYER_AVATAR_NAME) + "?uuid=" + UuidUtil.toUnsigned(profile.getId()));
+                    rows.add(row);
+                }
             }
         } catch (Throwable ignored) {}
-        return 0;
+        rows.sort(
+            (a, b) -> String.valueOf(a.get("name"))
+                .compareToIgnoreCase(String.valueOf(b.get("name"))));
+        return rows;
+    }
+
+    private byte[] renderConnectedPlayerAvatar(UUID uuid) {
+        GameProfile profile = findConnectedPlayerProfile(uuid);
+        if (profile == null) {
+            return null;
+        }
+
+        String skinUrl = DynmapSkinUrlResolver.resolveFromProfile(profile);
+        if (skinUrl == null) {
+            skinUrl = resolveLocalSkinUrl(uuid);
+        }
+        if (skinUrl == null) {
+            return null;
+        }
+
+        byte[] skinBytes = fetchBinary(skinUrl, MAX_HTTP_BYTES);
+        return skinBytes == null ? null : renderFacePng(skinBytes);
+    }
+
+    private static GameProfile findConnectedPlayerProfile(UUID uuid) {
+        Object configManager = null;
+        MinecraftServer server = MinecraftServer.getServer();
+        if (server != null) {
+            configManager = server.getConfigurationManager();
+        }
+        if (configManager == null) {
+            return null;
+        }
+        try {
+            Object rawList = configManager.getClass()
+                .getField("playerEntityList")
+                .get(configManager);
+            if (!(rawList instanceof List<?>)) {
+                return null;
+            }
+            for (Object rawPlayer : (List<?>) rawList) {
+                if (!(rawPlayer instanceof EntityPlayerMP)) {
+                    continue;
+                }
+                GameProfile profile = ((EntityPlayerMP) rawPlayer).getGameProfile();
+                if (profile != null && uuid.equals(profile.getId())) {
+                    return profile;
+                }
+            }
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static String resolveLocalSkinUrl(UUID uuid) {
+        WawelServer server = WawelServer.instance();
+        if (server == null || server.getProfileDAO() == null) {
+            return null;
+        }
+        WawelProfile profile = server.getProfileDAO()
+            .findByUuid(uuid);
+        if (profile == null || trimToNull(profile.getSkinHash()) == null) {
+            return null;
+        }
+        String apiRoot = trimToNull(
+            server.getServerConfig()
+                .getApiRoot());
+        return apiRoot == null ? null : apiRoot + "/textures/" + profile.getSkinHash();
     }
 
     private static String readServerProperty(String key, String fallback) {
@@ -740,6 +861,73 @@ public final class PublicPageService {
         return null;
     }
 
+    private static UUID parseUuidFlexible(String raw) {
+        String value = trimToNull(raw);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException ignored) {}
+        try {
+            return UUID.fromString(
+                value.replaceFirst(
+                    "^(\\p{XDigit}{8})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{4})(\\p{XDigit}{12})$",
+                    "$1-$2-$3-$4-$5"));
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
+    }
+
+    private static byte[] fetchBinary(String url, int maxBytes) {
+        java.net.HttpURLConnection conn = null;
+        try {
+            conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+            conn.setConnectTimeout(10_000);
+            conn.setReadTimeout(15_000);
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("Accept", "*/*");
+            int status = conn.getResponseCode();
+            if (status != 200) {
+                return null;
+            }
+            InputStream stream = conn.getInputStream();
+            return readAll(stream, maxBytes);
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private static byte[] readAll(InputStream in, int maxBytes) throws IOException {
+        try (InputStream input = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int total = 0;
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                total += read;
+                if (total > maxBytes) {
+                    throw new IOException("Response too large");
+                }
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        }
+    }
+
+    private static byte[] renderFacePng(byte[] skinBytes) {
+        return org.fentanylsolutions.wawelauth.api.WawelFaceRenderer.renderFacePng(skinBytes, 64);
+    }
+
+    private static BinaryResponse buildAvatarResponse(byte[] pngBytes) {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Cache-Control", "public, max-age=30");
+        return new BinaryResponse(pngBytes, "image/png", headers);
+    }
+
     private static Integer invokeInteger(Object target, String... methodNames) {
         if (target == null) {
             return null;
@@ -884,11 +1072,24 @@ public final class PublicPageService {
 
     private static final class CachedLiveStatus {
 
+        private final List<Map<String, Object>> connectedPlayers;
         private final int playersOnline;
         private final long expiresAtMs;
 
-        private CachedLiveStatus(int playersOnline, long expiresAtMs) {
-            this.playersOnline = playersOnline;
+        private CachedLiveStatus(List<Map<String, Object>> connectedPlayers, long expiresAtMs) {
+            this.connectedPlayers = Collections.unmodifiableList(new ArrayList<>(connectedPlayers));
+            this.playersOnline = connectedPlayers.size();
+            this.expiresAtMs = expiresAtMs;
+        }
+    }
+
+    private static final class CachedAvatar {
+
+        private final byte[] pngBytes;
+        private final long expiresAtMs;
+
+        private CachedAvatar(byte[] pngBytes, long expiresAtMs) {
+            this.pngBytes = pngBytes;
             this.expiresAtMs = expiresAtMs;
         }
     }

@@ -316,6 +316,41 @@ h1 {
     gap: 0.75rem;
 }
 
+.player-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 0.75rem;
+}
+
+.player-entry {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(5, 13, 35, 0.56);
+    border: 1px solid rgba(75, 102, 177, 0.38);
+    min-width: 0;
+}
+
+.player-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    object-fit: cover;
+    image-rendering: pixelated;
+    flex: 0 0 auto;
+}
+
+.player-name {
+    min-width: 0;
+    color: #eef3ff;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .modlist-widget {
     display: grid;
     gap: 0.75rem;
