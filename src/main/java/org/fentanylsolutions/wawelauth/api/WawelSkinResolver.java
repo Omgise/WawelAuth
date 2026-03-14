@@ -524,7 +524,8 @@ public class WawelSkinResolver {
         SessionBridge.OfflineLocalSkin offlineLocalSkin) {
         final BufferedImage skinImage;
         try {
-            skinImage = LocalTextureLoader.readImage(new File(offlineLocalSkin.getSkinPath()));
+            skinImage = SkinImageUtil
+                .convertLegacySkin(LocalTextureLoader.readImage(new File(offlineLocalSkin.getSkinPath())));
         } catch (Exception e) {
             WawelAuth.debug("Failed to load local offline skin for " + profileId + ": " + e.getMessage());
             handleFetchFailure(entry);

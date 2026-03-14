@@ -15,6 +15,7 @@ import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.api.SkinImageUtil;
 import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
 import org.fentanylsolutions.wawelauth.client.render.ISkinModelOverride;
 import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
@@ -145,7 +146,7 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
         final ResourceLocation location = makeSkinLocation(profileUuid);
         CompletableFuture.supplyAsync(() -> {
             try {
-                return LocalTextureLoader.readImage(file);
+                return SkinImageUtil.convertLegacySkin(LocalTextureLoader.readImage(file));
             } catch (Exception e) {
                 WawelAuth.debug("Failed to read local preview skin: " + e.getMessage());
                 return null;

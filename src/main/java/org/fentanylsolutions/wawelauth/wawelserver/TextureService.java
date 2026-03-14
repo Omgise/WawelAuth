@@ -15,6 +15,7 @@ import javax.imageio.stream.ImageInputStream;
 
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
+import org.fentanylsolutions.wawelauth.api.SkinImageUtil;
 import org.fentanylsolutions.wawelauth.wawelcore.config.ServerConfig;
 import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.TextureType;
@@ -202,6 +203,8 @@ public class TextureService {
                     && (height % 17 == 0)
                     && !((width % 64 == 0) && (height % 32 == 0))) {
                     cleanData = padAndReEncodeCape(fileData, width, height);
+                } else if (textureType == TextureType.SKIN && height * 2 == width) {
+                    cleanData = convertLegacySkin(fileData);
                 } else {
                     cleanData = reEncodePng(fileData);
                 }
@@ -376,6 +379,27 @@ public class TextureService {
             return out.toByteArray();
         } catch (IOException e) {
             throw NetException.illegalArgument("Failed to process cape image: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Converts a legacy 64x32 skin to 64x64 format using the shared converter,
+     * then re-encodes to strip metadata.
+     */
+    private static byte[] convertLegacySkin(byte[] data) {
+        try {
+            BufferedImage original = ImageIO.read(new ByteArrayInputStream(data));
+            if (original == null) {
+                throw NetException.illegalArgument("Failed to decode PNG image.");
+            }
+            BufferedImage converted = SkinImageUtil.convertLegacySkin(original);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            if (!ImageIO.write(converted, "png", out)) {
+                throw NetException.illegalArgument("Failed to re-encode converted skin.");
+            }
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw NetException.illegalArgument("Failed to process skin image: " + e.getMessage());
         }
     }
 
