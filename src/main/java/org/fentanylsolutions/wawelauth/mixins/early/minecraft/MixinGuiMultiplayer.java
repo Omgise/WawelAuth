@@ -15,8 +15,8 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.Config;
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.client.gui.AccountManagerScreen;
 import org.fentanylsolutions.wawelauth.client.gui.AuthButton;
 import org.fentanylsolutions.wawelauth.client.gui.FolderIconButton;
@@ -313,7 +313,7 @@ public abstract class MixinGuiMultiplayer extends GuiScreen implements IServerTo
         int faceX = tooltipX;
         int headerTextX = faceX + WAWELAUTH_TOOLTIP_FACE_AREA_WIDTH;
         int detailTextX = tooltipX;
-        WawelSkinResolver.drawFace(
+        WawelTextureResolver.drawFace(
             wawelauth$resolveTooltipSkin(),
             faceX,
             tooltipY,
@@ -343,21 +343,21 @@ public abstract class MixinGuiMultiplayer extends GuiScreen implements IServerTo
     private ResourceLocation wawelauth$resolveTooltipSkin() {
         WawelClient client = WawelClient.instance();
         if (client == null || this.wawelauth$tooltipProfileUuid == null) {
-            return WawelSkinResolver.getDefaultSkin();
+            return WawelTextureResolver.getDefaultSkin();
         }
 
         String displayName = this.wawelauth$tooltipDisplayName != null ? this.wawelauth$tooltipDisplayName : "?";
         if (this.wawelauth$tooltipProviderName != null && !this.wawelauth$tooltipProviderName.trim()
             .isEmpty()) {
-            return client.getSkinResolver()
+            return client.getTextureResolver()
                 .getSkin(
                     this.wawelauth$tooltipProfileUuid,
                     displayName,
                     this.wawelauth$tooltipProviderName,
-                    SkinRequest.DEFAULT);
+                    TextureRequest.DEFAULT);
         }
 
-        return client.getSkinResolver()
-            .getSkin(this.wawelauth$tooltipProfileUuid, displayName, SkinRequest.DEFAULT);
+        return client.getTextureResolver()
+            .getSkin(this.wawelauth$tooltipProfileUuid, displayName, TextureRequest.DEFAULT);
     }
 }

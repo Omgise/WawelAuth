@@ -6,7 +6,7 @@ import net.minecraft.client.renderer.tileentity.TileEntitySkullRenderer;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DMesh;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DSetup;
@@ -107,8 +107,8 @@ public class MixinTileEntitySkullRenderer {
         WawelClient client = WawelClient.instance();
         if (client == null || profile == null) return null;
 
-        return client.getSkinResolver()
-            .getSkin(profile.getId(), profile.getName(), SkinRequest.DEFAULT);
+        return client.getTextureResolver()
+            .getSkin(profile.getId(), profile.getName(), TextureRequest.DEFAULT);
     }
 
 }

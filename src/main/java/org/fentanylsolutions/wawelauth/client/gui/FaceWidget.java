@@ -5,8 +5,8 @@ import java.util.UUID;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.lwjgl.opengl.GL11;
 
@@ -19,7 +19,7 @@ import cpw.mods.fml.relauncher.SideOnly;
 
 /**
  * ModularUI widget that renders a player face at 8x8 pixels.
- * Uses {@link WawelSkinResolver} to resolve skins, no TabFaces dependency.
+ * Uses {@link WawelTextureResolver} to resolve skins, no TabFaces dependency.
  */
 @SideOnly(Side.CLIENT)
 public class FaceWidget extends Widget<FaceWidget> {
@@ -51,14 +51,14 @@ public class FaceWidget extends Widget<FaceWidget> {
         if (client != null && profileUuid != null) {
             if (providerName != null && !providerName.trim()
                 .isEmpty()) {
-                skin = client.getSkinResolver()
-                    .getSkin(profileUuid, displayName, providerName, SkinRequest.DEFAULT);
+                skin = client.getTextureResolver()
+                    .getSkin(profileUuid, displayName, providerName, TextureRequest.DEFAULT);
             } else {
-                skin = client.getSkinResolver()
-                    .getSkin(profileUuid, displayName, SkinRequest.DEFAULT);
+                skin = client.getTextureResolver()
+                    .getSkin(profileUuid, displayName, TextureRequest.DEFAULT);
             }
         } else {
-            skin = WawelSkinResolver.getDefaultSkin();
+            skin = WawelTextureResolver.getDefaultSkin();
         }
 
         GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
@@ -71,7 +71,7 @@ public class FaceWidget extends Widget<FaceWidget> {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
             RenderHelper.disableStandardItemLighting();
 
-            WawelSkinResolver.drawFace(skin, 0, 0, alpha);
+            WawelTextureResolver.drawFace(skin, 0, 0, alpha);
         } finally {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
             GL11.glPopAttrib();

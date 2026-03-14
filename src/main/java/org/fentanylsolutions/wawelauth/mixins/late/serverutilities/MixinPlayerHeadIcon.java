@@ -6,8 +6,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Final;
@@ -70,16 +70,16 @@ public abstract class MixinPlayerHeadIcon extends ImageIcon {
     private ResourceLocation wawelauth$resolveSkin() {
         UUID profileUuid = wawelauth$resolveProfileUuid();
         if (profileUuid == null) {
-            return WawelSkinResolver.getDefaultSkin();
+            return WawelTextureResolver.getDefaultSkin();
         }
 
         WawelClient client = WawelClient.instance();
         if (client == null) {
-            return WawelSkinResolver.getDefaultSkin();
+            return WawelTextureResolver.getDefaultSkin();
         }
 
-        return client.getSkinResolver()
-            .getSkin(profileUuid, wawelauth$resolveDisplayName(profileUuid), SkinRequest.DEFAULT);
+        return client.getTextureResolver()
+            .getSkin(profileUuid, wawelauth$resolveDisplayName(profileUuid), TextureRequest.DEFAULT);
     }
 
     @Unique

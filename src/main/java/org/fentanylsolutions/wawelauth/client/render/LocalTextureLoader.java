@@ -30,8 +30,7 @@ import cpw.mods.fml.relauncher.SideOnly;
 @SideOnly(Side.CLIENT)
 public final class LocalTextureLoader {
 
-    private static final Set<UUID> OFFLINE_CAPE_LOADS = Collections
-        .newSetFromMap(new ConcurrentHashMap<UUID, Boolean>());
+    private static final Set<UUID> OFFLINE_CAPE_LOADS = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private static final Map<ResourceLocation, BufferedImage> imageCache = new ConcurrentHashMap<>();
 
@@ -77,12 +76,16 @@ public final class LocalTextureLoader {
         return location != null ? imageCache.get(location) : null;
     }
 
+    public static void clearImageCache() {
+        imageCache.clear();
+    }
+
     public static boolean isGifPath(String path) {
         return path != null && path.toLowerCase()
             .endsWith(".gif");
     }
 
-    public static ResourceLocation getOfflineCape(UUID profileId, String capePath) {
+    public static ResourceLocation getOfflineGIFCape(UUID profileId, String capePath) {
         if (profileId == null || capePath == null
             || capePath.trim()
                 .isEmpty()) {
@@ -98,24 +101,7 @@ public final class LocalTextureLoader {
             return null;
         }
 
-        File file = new File(capePath);
-        if (!file.isFile()) {
-            return null;
-        }
-
-        ResourceLocation location = offlineCapeLocation(profileId);
-        TextureManager textureManager = Minecraft.getMinecraft()
-            .getTextureManager();
-        if (textureManager.getTexture(location) != null) {
-            return location;
-        }
-
-        try {
-            return registerBufferedImage(location, readImage(file));
-        } catch (IOException e) {
-            WawelAuth.debug("Failed to load local offline cape for " + profileId + ": " + e.getMessage());
-            return null;
-        }
+        return null;
     }
 
     public static void invalidateOfflineCape(UUID profileId) {
@@ -124,12 +110,6 @@ public final class LocalTextureLoader {
         }
         OFFLINE_CAPE_LOADS.remove(profileId);
         AnimatedCapeTracker.remove(profileId);
-        TextureManager textureManager = Minecraft.getMinecraft()
-            .getTextureManager();
-        ResourceLocation location = offlineCapeLocation(profileId);
-        if (textureManager.getTexture(location) != null) {
-            textureManager.deleteTexture(location);
-        }
     }
 
     private static void ensureOfflineAnimatedCapeLoaded(UUID profileId, String capePath) {
@@ -164,7 +144,4 @@ public final class LocalTextureLoader {
                     }));
     }
 
-    private static ResourceLocation offlineCapeLocation(UUID profileId) {
-        return new ResourceLocation("wawelauth", "offline_capes/" + UuidUtil.toUnsigned(profileId));
-    }
 }

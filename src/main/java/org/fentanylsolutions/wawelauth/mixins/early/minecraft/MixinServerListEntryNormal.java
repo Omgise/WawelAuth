@@ -13,8 +13,8 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.client.gui.AccountManagerScreen;
 import org.fentanylsolutions.wawelauth.client.gui.GuiText;
 import org.fentanylsolutions.wawelauth.client.gui.IServerTooltipFaceHost;
@@ -423,7 +423,7 @@ public class MixinServerListEntryNormal {
             GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
-            WawelSkinResolver.drawFace(skin, x, y, ACCOUNT_HEAD_SIZE, ACCOUNT_HEAD_SIZE, 1.0F);
+            WawelTextureResolver.drawFace(skin, x, y, ACCOUNT_HEAD_SIZE, ACCOUNT_HEAD_SIZE, 1.0F);
         } finally {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
             GL11.glPopAttrib();
@@ -433,7 +433,7 @@ public class MixinServerListEntryNormal {
     private static ResourceLocation resolveSelectedAccountSkin(ClientAccount account, String fallbackProviderName,
         WawelClient client) {
         if (account == null || client == null) {
-            return WawelSkinResolver.getDefaultSkin();
+            return WawelTextureResolver.getDefaultSkin();
         }
 
         java.util.UUID profileUuid = account.getProfileUuid();
@@ -448,11 +448,11 @@ public class MixinServerListEntryNormal {
         }
 
         if (providerName != null) {
-            return client.getSkinResolver()
-                .getSkin(profileUuid, displayName, providerName, SkinRequest.DEFAULT);
+            return client.getTextureResolver()
+                .getSkin(profileUuid, displayName, providerName, TextureRequest.DEFAULT);
         }
-        return client.getSkinResolver()
-            .getSkin(profileUuid, displayName, SkinRequest.DEFAULT);
+        return client.getTextureResolver()
+            .getSkin(profileUuid, displayName, TextureRequest.DEFAULT);
     }
 
     private static boolean notBlank(String value) {

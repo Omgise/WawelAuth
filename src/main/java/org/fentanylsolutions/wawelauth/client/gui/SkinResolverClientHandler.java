@@ -7,6 +7,8 @@ import net.minecraft.client.entity.EntityOtherPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
+import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DSetup;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 
@@ -18,7 +20,7 @@ import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
 
 /**
- * Manages the {@link org.fentanylsolutions.wawelauth.api.WawelSkinResolver} state by:
+ * Manages the {@link WawelTextureResolver} state by:
  * <ul>
  * <li>Sweeping expired cache entries on client tick.</li>
  * <li>Invalidating player data on world join.</li>
@@ -47,7 +49,7 @@ public final class SkinResolverClientHandler {
         if (event.phase != TickEvent.Phase.END) return;
         WawelClient client = WawelClient.instance();
         if (client != null) {
-            client.getSkinResolver()
+            client.getTextureResolver()
                 .tick();
         }
     }
@@ -63,7 +65,7 @@ public final class SkinResolverClientHandler {
         UUID playerID = playerMP.getUniqueID();
         if (playerID == null) return;
 
-        client.getSkinResolver()
+        client.getTextureResolver()
             .invalidate(playerID);
         Minecraft.getMinecraft()
             .func_152344_a(() -> {
@@ -77,8 +79,9 @@ public final class SkinResolverClientHandler {
         WawelClient client = WawelClient.instance();
         if (client == null) return;
 
-        client.getSkinResolver()
+        client.getTextureResolver()
             .invalidateAll();
+        LocalTextureLoader.clearImageCache();
         Minecraft.getMinecraft()
             .func_152344_a(() -> {
                 SkinLayers3DSetup.clearSkullCache();

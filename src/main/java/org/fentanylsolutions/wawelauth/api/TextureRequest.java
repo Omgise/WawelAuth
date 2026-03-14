@@ -1,30 +1,30 @@
 package org.fentanylsolutions.wawelauth.api;
 
 /**
- * Caller-controlled flags for {@link WawelSkinResolver#getSkin} requests.
+ * Caller-controlled flags for {@link WawelTextureResolver#getSkin} / {@link WawelTextureResolver#getCape} requests.
  *
  * {@link #requireSigned}: demand cryptographic signature on the texture property.
  * {@link #allowVanillaFallback}: if no WawelAuth provider is found, try Mojang
  * session service as a last resort.
  */
-public final class SkinRequest {
+public final class TextureRequest {
 
     /** Unsigned textures accepted, Mojang fallback allowed. */
-    public static final SkinRequest DEFAULT = new SkinRequest(false, true);
+    public static final TextureRequest DEFAULT = new TextureRequest(false, true);
 
     /** Signed textures required, Mojang fallback allowed. */
-    public static final SkinRequest SIGNED = new SkinRequest(true, true);
+    public static final TextureRequest SIGNED = new TextureRequest(true, true);
 
     /** Signed textures required, no Mojang fallback. */
-    public static final SkinRequest STRICT = new SkinRequest(true, false);
+    public static final TextureRequest STRICT = new TextureRequest(true, false);
 
     /** Unsigned textures accepted, no Mojang fallback. */
-    public static final SkinRequest NO_FALLBACK = new SkinRequest(false, false);
+    public static final TextureRequest NO_FALLBACK = new TextureRequest(false, false);
 
     private final boolean requireSigned;
     private final boolean allowVanillaFallback;
 
-    public SkinRequest(boolean requireSigned, boolean allowVanillaFallback) {
+    public TextureRequest(boolean requireSigned, boolean allowVanillaFallback) {
         this.requireSigned = requireSigned;
         this.allowVanillaFallback = allowVanillaFallback;
     }

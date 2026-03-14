@@ -3,7 +3,7 @@ package org.fentanylsolutions.wawelauth.wawelclient;
 import java.io.File;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.wawelclient.http.YggdrasilHttpClient;
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientAccountDAO;
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientProviderDAO;
@@ -36,7 +36,7 @@ public class WawelClient {
     private final LocalAuthProviderResolver localAuthProviderResolver;
     private final AccountManager accountManager;
     private final SessionBridge sessionBridge;
-    private final WawelSkinResolver skinResolver;
+    private final WawelTextureResolver textureResolver;
 
     private WawelClient(File dataDir) {
         WawelAuth.LOG.info("Starting WawelAuth client module...");
@@ -70,7 +70,7 @@ public class WawelClient {
         sessionBridge.tryImportLauncherSession();
 
         // Skin resolver: unified skin resolution API
-        skinResolver = new WawelSkinResolver(sessionBridge);
+        textureResolver = new WawelTextureResolver(sessionBridge);
 
         int prunedBindings = ServerBindingPersistence.clearMissingAccountBindings(accountManager);
         if (prunedBindings > 0) {
@@ -129,7 +129,7 @@ public class WawelClient {
             WawelAuth.LOG.warn("Error shutting down account manager: {}", e.getMessage());
         }
         try {
-            skinResolver.shutdown();
+            textureResolver.shutdown();
         } catch (Exception e) {
             WawelAuth.LOG.warn("Error shutting down skin resolver: {}", e.getMessage());
         }
@@ -169,8 +169,8 @@ public class WawelClient {
         return sessionBridge;
     }
 
-    public WawelSkinResolver getSkinResolver() {
-        return skinResolver;
+    public WawelTextureResolver getTextureResolver() {
+        return textureResolver;
     }
 
     public YggdrasilHttpClient getHttpClient() {

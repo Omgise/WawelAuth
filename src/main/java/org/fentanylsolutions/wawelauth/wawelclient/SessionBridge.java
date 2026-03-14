@@ -875,7 +875,7 @@ public class SessionBridge {
         }
 
         // Keep Mojang's verification context available even without a usable
-        // launcher session. When SkinRequest allows vanilla fallback, authlib
+        // launcher session. When TextureRequest allows vanilla fallback, authlib
         // can still resolve public profile textures from the client's default
         // session service, and those textures must pass signature/domain checks.
         ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);

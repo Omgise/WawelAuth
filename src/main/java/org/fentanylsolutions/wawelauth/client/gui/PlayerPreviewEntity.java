@@ -16,7 +16,7 @@ import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.SkinImageUtil;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.client.render.ISkinModelOverride;
 import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.client.render.ProviderThreadDownloadImageData;
@@ -397,7 +397,7 @@ public class PlayerPreviewEntity extends EntityOtherPlayerMP implements ISkinMod
         ProviderThreadDownloadImageData texture = new ProviderThreadDownloadImageData(
             null,
             url,
-            WawelSkinResolver.getDefaultSkin(),
+            WawelTextureResolver.getDefaultSkin(),
             buffer,
             provider);
 

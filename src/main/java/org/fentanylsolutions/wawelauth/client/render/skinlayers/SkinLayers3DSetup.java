@@ -12,7 +12,7 @@ import net.minecraft.client.renderer.texture.ITextureObject;
 import net.minecraft.util.ResourceLocation;
 
 import org.fentanylsolutions.wawelauth.WawelAuth;
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
 import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.client.render.ProviderThreadDownloadImageData;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.voxels.VoxelBuilder;
@@ -83,8 +83,8 @@ public class SkinLayers3DSetup {
         WawelClient client = WawelClient.instance();
         if (client == null) return null;
 
-        ResourceLocation skinLocation = client.getSkinResolver()
-            .getSkin(player.getUniqueID(), player.getDisplayName(), SkinRequest.DEFAULT);
+        ResourceLocation skinLocation = client.getTextureResolver()
+            .getSkin(player.getUniqueID(), player.getDisplayName(), TextureRequest.DEFAULT);
         if (skinLocation == null) return null;
 
         // Check if skin hasn't changed and slim matches
@@ -221,11 +221,7 @@ public class SkinLayers3DSetup {
             return providerImageData.bufferedImage;
         }
         // Offline/local skins are registered as DynamicTexture via LocalTextureLoader
-        BufferedImage cached = LocalTextureLoader.getCachedImage(skinLocation);
-        if (cached != null) {
-            return cached;
-        }
-        return null;
+        return LocalTextureLoader.getCachedImage(skinLocation);
     }
 
     public static class SkullMeshCache {

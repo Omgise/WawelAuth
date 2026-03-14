@@ -8,14 +8,15 @@ import java.util.UUID;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class WawelSkinResolverTest {
+public class WawelTextureResolverTest {
 
     @Test
     public void buildCacheKeyKeepsProviderScopesSeparate() {
         UUID profileId = UUID.fromString("12345678-1234-1234-1234-1234567890ab");
 
-        String alphaKey = WawelSkinResolver.buildCacheKey(WawelSkinResolver.buildProviderScope("Alpha"), profileId);
-        String betaKey = WawelSkinResolver.buildCacheKey(WawelSkinResolver.buildProviderScope("Beta"), profileId);
+        String alphaKey = WawelTextureResolver
+            .buildCacheKey(WawelTextureResolver.buildProviderScope("Alpha"), profileId);
+        String betaKey = WawelTextureResolver.buildCacheKey(WawelTextureResolver.buildProviderScope("Beta"), profileId);
 
         Assert.assertEquals("provider:alpha|12345678-1234-1234-1234-1234567890ab", alphaKey);
         Assert.assertEquals("provider:beta|12345678-1234-1234-1234-1234567890ab", betaKey);
@@ -24,7 +25,7 @@ public class WawelSkinResolverTest {
 
     @Test
     public void normalizeSkinDomainsInfersSessionHostWhenDomainsMissing() {
-        List<String> domains = WawelSkinResolver
+        List<String> domains = WawelTextureResolver
             .normalizeSkinDomains("https://session.example.com/sessionserver/", Collections.<String>emptyList());
 
         Assert.assertEquals(Collections.singletonList("session.example.com"), domains);
@@ -32,7 +33,7 @@ public class WawelSkinResolverTest {
 
     @Test
     public void normalizeSkinDomainsDeduplicatesAndNormalizesHosts() {
-        List<String> domains = WawelSkinResolver.normalizeSkinDomains(
+        List<String> domains = WawelTextureResolver.normalizeSkinDomains(
             "https://session.example.com/sessionserver",
             Arrays.asList(
                 "TEXTURES.EXAMPLE.COM",

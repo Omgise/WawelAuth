@@ -9,8 +9,8 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
-import org.fentanylsolutions.wawelauth.api.WawelSkinResolver;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.client.gui.AuthButton;
 import org.fentanylsolutions.wawelauth.client.gui.ServerAccountPickerScreen;
 import org.fentanylsolutions.wawelauth.wawelclient.SingleplayerAccountPersistence;
@@ -110,17 +110,17 @@ public abstract class MixinGuiSelectWorld extends GuiScreen {
     @Unique
     private void wawelauth$drawFace(ClientAccount account, int x, int y) {
         WawelClient client = WawelClient.instance();
-        ResourceLocation skin = WawelSkinResolver.getDefaultSkin();
+        ResourceLocation skin = WawelTextureResolver.getDefaultSkin();
         if (client != null) {
             String profileName = account.getProfileName() != null ? account.getProfileName() : "?";
             String providerName = account.getProviderName();
             if (providerName != null && !providerName.trim()
                 .isEmpty()) {
-                skin = client.getSkinResolver()
-                    .getSkin(account.getProfileUuid(), profileName, providerName, SkinRequest.DEFAULT);
+                skin = client.getTextureResolver()
+                    .getSkin(account.getProfileUuid(), profileName, providerName, TextureRequest.DEFAULT);
             } else {
-                skin = client.getSkinResolver()
-                    .getSkin(account.getProfileUuid(), profileName, SkinRequest.DEFAULT);
+                skin = client.getTextureResolver()
+                    .getSkin(account.getProfileUuid(), profileName, TextureRequest.DEFAULT);
             }
         }
 
@@ -134,7 +134,7 @@ public abstract class MixinGuiSelectWorld extends GuiScreen {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
             RenderHelper.disableStandardItemLighting();
 
-            WawelSkinResolver
+            WawelTextureResolver
                 .drawFace(skin, x, y, WAWELAUTH_SINGLEPLAYER_HEAD_SIZE, WAWELAUTH_SINGLEPLAYER_HEAD_SIZE, 1.0F);
         } finally {
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);

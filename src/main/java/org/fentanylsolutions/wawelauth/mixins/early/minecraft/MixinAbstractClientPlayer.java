@@ -4,10 +4,9 @@ import java.util.UUID;
 
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.resources.SkinManager;
-import net.minecraft.entity.Entity;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTexture;
 import org.fentanylsolutions.wawelauth.client.gui.AnimatedCapeTracker;
 import org.fentanylsolutions.wawelauth.client.render.IProviderAwareSkinManager;
@@ -75,9 +74,9 @@ public class MixinAbstractClientPlayer {
 
     @Inject(method = "getLocationCape", at = @At("RETURN"), cancellable = true)
     private void wawelauth$overrideAnimatedCape(CallbackInfoReturnable<ResourceLocation> cir) {
-        // Access UUID via Entity cast: getGameProfile() is inherited from EntityPlayer
-        // and cannot be @Shadow'd on AbstractClientPlayer.
-        UUID uuid = ((Entity) (Object) this).getUniqueID();
+
+        AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
+        UUID uuid = self.getUniqueID();
         if (uuid == null) return;
 
         AnimatedCapeTexture animated = AnimatedCapeTracker.get(uuid);
@@ -97,9 +96,49 @@ public class MixinAbstractClientPlayer {
             return;
         }
 
-        ResourceLocation resolved = LocalTextureLoader.getOfflineCape(uuid, local.getCapePath());
+        ResourceLocation resolved = client.getTextureResolver()
+            .getCape(
+                uuid,
+                self.getCommandSenderName(),
+                BuiltinProviders.OFFLINE_PROVIDER_NAME,
+                TextureRequest.NO_FALLBACK);
         if (resolved != null) {
             cir.setReturnValue(resolved);
+        }
+    }
+
+    @Inject(method = "func_152122_n", at = @At("RETURN"), cancellable = true)
+    private void wawelauth$reportOfflineLocalCape(CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValue()) {
+            return;
+        }
+
+        WawelClient client = WawelClient.instance();
+        if (client == null) {
+            return;
+        }
+
+        AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
+        UUID uuid = self.getUniqueID();
+        if (uuid == null) {
+            return;
+        }
+
+        SessionBridge.OfflineLocalSkin local = client.getSessionBridge()
+            .resolveOfflineLocalSkin(uuid);
+        if (local == null || local.getCapePath() == null) {
+            return;
+        }
+
+        ResourceLocation resolved = client.getTextureResolver()
+            .getCape(
+                uuid,
+                self.getCommandSenderName(),
+                BuiltinProviders.OFFLINE_PROVIDER_NAME,
+                TextureRequest.NO_FALLBACK);
+
+        if (resolved != null || LocalTextureLoader.getOfflineGIFCape(uuid, local.getCapePath()) != null) {
+            cir.setReturnValue(true);
         }
     }
 
@@ -123,38 +162,15 @@ public class MixinAbstractClientPlayer {
             return;
         }
 
-        ResourceLocation resolved = client.getSkinResolver()
+        ResourceLocation resolved = client.getTextureResolver()
             .getSkin(
                 uuid,
                 self.getCommandSenderName(),
                 BuiltinProviders.OFFLINE_PROVIDER_NAME,
-                SkinRequest.NO_FALLBACK);
+                TextureRequest.NO_FALLBACK);
         if (resolved != null) {
             cir.setReturnValue(resolved);
         }
     }
 
-    @Inject(method = "func_152122_n", at = @At("RETURN"), cancellable = true)
-    private void wawelauth$reportOfflineLocalCape(CallbackInfoReturnable<Boolean> cir) {
-        if (cir.getReturnValue()) {
-            return;
-        }
-
-        WawelClient client = WawelClient.instance();
-        if (client == null) {
-            return;
-        }
-
-        UUID uuid = ((Entity) (Object) this).getUniqueID();
-        if (uuid == null) {
-            return;
-        }
-
-        SessionBridge.OfflineLocalSkin local = client.getSessionBridge()
-            .resolveOfflineLocalSkin(uuid);
-        if (local != null && local.getCapePath() != null
-            && LocalTextureLoader.getOfflineCape(uuid, local.getCapePath()) != null) {
-            cir.setReturnValue(true);
-        }
-    }
 }

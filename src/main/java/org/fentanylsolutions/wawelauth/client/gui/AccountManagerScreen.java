@@ -1968,7 +1968,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                     ClientAccount account = client.getAccountManager()
                         .getAccount(accountId);
                     if (account != null && account.getProfileUuid() != null) {
-                        client.getSkinResolver()
+                        client.getTextureResolver()
                             .invalidate(account.getProfileUuid());
                     }
                 }
@@ -2643,7 +2643,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                 selectedAccount = refreshed;
             }
             if (selectedAccount.getProfileUuid() != null) {
-                client.getSkinResolver()
+                client.getTextureResolver()
                     .invalidate(selectedAccount.getProfileUuid());
                 LocalTextureLoader.invalidateOfflineCape(selectedAccount.getProfileUuid());
             }
@@ -3025,7 +3025,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                 selectedAccount = refreshed;
             }
             if (selectedAccount.getProfileUuid() != null) {
-                client.getSkinResolver()
+                client.getTextureResolver()
                     .invalidate(selectedAccount.getProfileUuid());
                 LocalTextureLoader.invalidateOfflineCape(selectedAccount.getProfileUuid());
             }

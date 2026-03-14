@@ -3,7 +3,7 @@ package org.fentanylsolutions.wawelauth.mixins.late.betterquesting;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.util.ResourceLocation;
 
-import org.fentanylsolutions.wawelauth.api.SkinRequest;
+import org.fentanylsolutions.wawelauth.api.TextureRequest;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,7 +30,7 @@ public abstract class MixinEntityPlayerPreview {
         }
 
         cir.setReturnValue(
-            client.getSkinResolver()
-                .getSkin(profile.getId(), profile.getName(), SkinRequest.DEFAULT));
+            client.getTextureResolver()
+                .getSkin(profile.getId(), profile.getName(), TextureRequest.DEFAULT));
     }
 }
