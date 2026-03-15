@@ -108,9 +108,14 @@ public final class PublicPageService {
     public void registerRoutes(HttpRouter router) {
         warnOnOverlaps();
 
-        if (!publicInfoApiPath.isEmpty()) {
+        if (serverConfig.isPublicInfoApiEnabled() && !publicInfoApiPath.isEmpty()) {
             router.get(publicInfoApiPath, ctx -> servePublicInfo());
         }
+
+        if (!serverConfig.isPublicPageEnabled()) {
+            return;
+        }
+
         router.get(joinRoute(publicPath, ICON_PNG_NAME), ctx -> serveServerIconPng());
         router.get(joinRoute(publicPath, ICON_GIF_NAME), ctx -> serveServerIconGif());
         router.get(joinRoute(publicPath, PLAYER_AVATAR_NAME), ctx -> servePlayerAvatar(ctx.getQueryParam("uuid")));

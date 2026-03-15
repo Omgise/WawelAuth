@@ -6,6 +6,7 @@ import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.resources.SkinManager;
 import net.minecraft.util.ResourceLocation;
 
+import org.fentanylsolutions.wawelauth.api.WawelTextureResolver;
 import org.fentanylsolutions.wawelauth.api.internal.TextureRequest;
 import org.fentanylsolutions.wawelauth.client.render.IProviderAwareSkinManager;
 import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
@@ -145,12 +146,7 @@ public class MixinAbstractClientPlayer {
     }
 
     @Inject(method = "getLocationSkin", at = @At("RETURN"), cancellable = true)
-    private void wawelauth$overrideOfflineLocalSkin(CallbackInfoReturnable<ResourceLocation> cir) {
-        ResourceLocation current = cir.getReturnValue();
-        if (current != null && !current.equals(locationStevePng)) {
-            return;
-        }
-
+    private void wawelauth$overrideSkin(CallbackInfoReturnable<ResourceLocation> cir) {
         WawelClient client = WawelClient.instance();
         if (client == null) {
             return;
@@ -158,20 +154,44 @@ public class MixinAbstractClientPlayer {
 
         AbstractClientPlayer self = (AbstractClientPlayer) (Object) this;
         UUID uuid = self.getUniqueID();
-        SessionBridge.OfflineLocalSkin local = uuid != null ? client.getSessionBridge()
-            .resolveOfflineLocalSkin(uuid) : null;
+        if (uuid == null) {
+            return;
+        }
+
+        // Check WawelTextureResolver for a resolved skin. This handles both
+        // online skin changes (invalidated via packet) and offline local skins.
+        // Only override when the resolver has a real (non-placeholder) skin to
+        // avoid replacing vanilla's valid result with Steve during async fetch.
+        ResourceLocation resolved = client.getTextureResolver()
+            .getSkin(uuid, self.getCommandSenderName(), TextureRequest.DEFAULT);
+        if (resolved != null && !resolved.equals(WawelTextureResolver.getDefaultSkin())
+            && !resolved.equals(WawelTextureResolver.LEGACY_STEVE)) {
+            cir.setReturnValue(resolved);
+            return;
+        }
+
+        // Resolver hasn't resolved yet or returned placeholder — fall back to
+        // vanilla's result if it has a valid skin.
+        ResourceLocation current = cir.getReturnValue();
+        if (current != null && !current.equals(locationStevePng)) {
+            return;
+        }
+
+        // Last resort: check for offline local skin with explicit provider scope
+        SessionBridge.OfflineLocalSkin local = client.getSessionBridge()
+            .resolveOfflineLocalSkin(uuid);
         if (local == null || local.getSkinPath() == null) {
             return;
         }
 
-        ResourceLocation resolved = client.getTextureResolver()
+        ResourceLocation offlineResolved = client.getTextureResolver()
             .getSkin(
                 uuid,
                 self.getCommandSenderName(),
                 BuiltinProviders.OFFLINE_PROVIDER_NAME,
                 TextureRequest.NO_FALLBACK);
-        if (resolved != null) {
-            cir.setReturnValue(resolved);
+        if (offlineResolved != null) {
+            cir.setReturnValue(offlineResolved);
         }
     }
 

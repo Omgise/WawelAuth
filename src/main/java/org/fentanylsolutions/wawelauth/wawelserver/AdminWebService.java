@@ -42,6 +42,8 @@ import net.minecraft.server.management.UserListWhitelist;
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.WawelFaceRendererServer;
+import org.fentanylsolutions.wawelauth.packet.PacketHandler;
+import org.fentanylsolutions.wawelauth.packet.SkinInvalidatePacket;
 import org.fentanylsolutions.wawelauth.wawelcore.config.FallbackServer;
 import org.fentanylsolutions.wawelauth.wawelcore.config.JsonConfigIO;
 import org.fentanylsolutions.wawelauth.wawelcore.config.RegistrationPolicy;
@@ -451,6 +453,7 @@ public class AdminWebService {
             }
             if (modified) {
                 profileDAO.update(profile);
+                PacketHandler.sendToAll(new SkinInvalidatePacket(profile.getUuid()));
                 changed++;
             }
         }

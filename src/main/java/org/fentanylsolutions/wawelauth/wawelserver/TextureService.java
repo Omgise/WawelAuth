@@ -16,6 +16,8 @@ import javax.imageio.stream.ImageInputStream;
 import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.api.SkinImageUtil;
+import org.fentanylsolutions.wawelauth.packet.PacketHandler;
+import org.fentanylsolutions.wawelauth.packet.SkinInvalidatePacket;
 import org.fentanylsolutions.wawelauth.wawelcore.config.ServerConfig;
 import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.TextureType;
@@ -162,6 +164,7 @@ public class TextureService {
                 profile.setTextureHash(textureType, hash);
                 profile.setCapeAnimated(true);
                 profileDAO.update(profile);
+                broadcastSkinInvalidate(profile);
 
                 WawelAuth.debug(
                     "Animated cape uploaded for profile " + profile
@@ -226,6 +229,7 @@ public class TextureService {
                     profile.setCapeAnimated(false);
                 }
                 profileDAO.update(profile);
+                broadcastSkinInvalidate(profile);
 
                 WawelAuth.debug(
                     "Texture " + textureType
@@ -259,6 +263,7 @@ public class TextureService {
             profile.setSkinModel(SkinModel.CLASSIC);
         }
         profileDAO.update(profile);
+        broadcastSkinInvalidate(profile);
 
         // Clean up the file if no other profile references this hash.
         if (oldHash != null && !profileDAO.isTextureHashReferenced(oldHash)) {
@@ -540,6 +545,10 @@ public class TextureService {
             return SkinModel.SLIM;
         }
         throw NetException.illegalArgument("Invalid skin model '" + model + "'. Expected 'default' or 'slim'.");
+    }
+
+    private static void broadcastSkinInvalidate(WawelProfile profile) {
+        PacketHandler.sendToAll(new SkinInvalidatePacket(profile.getUuid()));
     }
 
     private static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();

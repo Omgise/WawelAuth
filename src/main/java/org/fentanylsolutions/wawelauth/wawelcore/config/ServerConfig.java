@@ -33,6 +33,8 @@ public class ServerConfig {
      * Used to construct texture URLs and the ALI metadata response.
      */
     private String apiRoot = "";
+    private boolean enablePublicPage = true;
+    private boolean enablePublicInfoApi = true;
     private String publicPagePath = "/";
     private String publicInfoApiPath = "__server-info";
 
@@ -69,6 +71,22 @@ public class ServerConfig {
 
     public void setLocalAuthEnabled(boolean enableLocalAuth) {
         this.enableLocalAuth = enableLocalAuth;
+    }
+
+    public boolean isPublicPageEnabled() {
+        return enablePublicPage;
+    }
+
+    public void setPublicPageEnabled(boolean enablePublicPage) {
+        this.enablePublicPage = enablePublicPage;
+    }
+
+    public boolean isPublicInfoApiEnabled() {
+        return enablePublicInfoApi;
+    }
+
+    public void setPublicInfoApiEnabled(boolean enablePublicInfoApi) {
+        this.enablePublicInfoApi = enablePublicInfoApi;
     }
 
     public String getServerName() {
