@@ -81,23 +81,11 @@ body {
 }
 
 .hero {
-    position: relative;
     display: grid;
     grid-template-columns: 170px minmax(0, 1fr);
     gap: 1.2rem;
     align-items: center;
     padding: 1.35rem 1.45rem;
-}
-
-.hero-corner-actions {
-    position: absolute;
-    top: 1.15rem;
-    right: 1.2rem;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.65rem;
-    max-width: calc(100% - 2.4rem);
 }
 
 .hero-art {
@@ -136,7 +124,25 @@ body {
 }
 
 .hero-copy {
+    display: grid;
+    gap: 0;
     min-width: 0;
+}
+
+.hero-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.hero-corner-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-self: start;
+    gap: 0.65rem;
 }
 
 h1 {
@@ -144,6 +150,8 @@ h1 {
     font-size: clamp(2.2rem, 5vw, 3.6rem);
     line-height: 1.04;
     letter-spacing: 0.02em;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .sub,
@@ -513,13 +521,15 @@ code {
     .hero {
         grid-template-columns: 1fr;
         padding: 1.1rem;
-        padding-top: 4.2rem;
+    }
+
+    .hero-head {
+        grid-template-columns: 1fr;
+        gap: 0.8rem;
     }
 
     .hero-corner-actions {
-        top: 1rem;
-        right: 1rem;
-        left: 1rem;
+        justify-content: flex-end;
     }
 
     .footer {

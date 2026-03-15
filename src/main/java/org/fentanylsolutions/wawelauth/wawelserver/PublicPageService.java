@@ -284,10 +284,14 @@ public final class PublicPageService {
                     .getServerRegister()),
             serverConfig.getAdmin()
                 .isEnabled(),
-            Loader.isModLoaded("dynmap"),
+            isDynmapInstalled(),
             Collections.unmodifiableList(new ArrayList<>(resolveInstalledMods())),
             readExistingFileBytes(resolveServerDirectoryFile("server-icon.png")),
             readExistingFileBytes(resolveServerDirectoryFile("server-icon.gif")));
+    }
+
+    private static boolean isDynmapInstalled() {
+        return Loader.isModLoaded("dynmap") || Loader.isModLoaded("Dynmap") || Loader.isModLoaded("gtnh-web-map");
     }
 
     private Map<String, Object> buildPublicInfoPayload(long now, StaticPublicInfo staticInfo,

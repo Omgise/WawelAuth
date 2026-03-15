@@ -16,17 +16,6 @@
 
     <main class="page">
         <section class="card hero">
-            <div class="hero-corner-actions">
-                <a class="btn icon-btn hidden" id="adminButton" href="/admin">
-                    <span class="nf-icon" aria-hidden="true">&#xf030b;</span>
-                    <span>Admin Panel</span>
-                </a>
-                <a class="btn icon-btn alt hidden" id="dynmapButton" href="/dynmap">
-                    <span class="nf-icon" aria-hidden="true">&#xf1418;</span>
-                    <span>Dynmap</span>
-                </a>
-            </div>
-
             <div class="hero-art">
                 <div class="icon-wrap" id="iconWrap" title="">
                     <img id="serverIcon" src="./pack-fallback.png" alt="Server icon">
@@ -34,7 +23,19 @@
             </div>
 
             <div class="hero-copy">
-                <h1 id="serverName">Wawel Auth Server</h1>
+                <div class="hero-head">
+                    <h1 id="serverName">Wawel Auth Server</h1>
+                    <div class="hero-corner-actions">
+                        <a class="btn icon-btn hidden" id="adminButton" href="/admin">
+                            <span class="nf-icon" aria-hidden="true">&#xf030b;</span>
+                            <span>Admin Panel</span>
+                        </a>
+                        <a class="btn icon-btn alt hidden" id="dynmapButton" href="/dynmap">
+                            <span class="nf-icon" aria-hidden="true">&#xf1418;</span>
+                            <span>Dynmap</span>
+                        </a>
+                    </div>
+                </div>
                 <p class="label hero-label">MOTD</p>
                 <p class="sub motd-line" id="motdLine">Minecraft Server</p>
                 <p class="desc hidden" id="serverDescription"></p>
