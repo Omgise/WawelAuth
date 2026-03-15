@@ -58,7 +58,7 @@ public class WawelClient {
 
         // Provider registry
         providerRegistry = new ProviderRegistry(providerDAO, httpClient);
-        providerRegistry.ensureBuiltinProviders();
+        providerRegistry.ensureDefaultProviders();
         localAuthProviderResolver = new LocalAuthProviderResolver(providerDAO);
 
         // Account manager

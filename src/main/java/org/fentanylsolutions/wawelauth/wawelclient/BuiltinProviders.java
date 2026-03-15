@@ -1,7 +1,7 @@
 package org.fentanylsolutions.wawelauth.wawelclient;
 
 /**
- * Stable identifiers for built-in client providers.
+ * Stable identifiers for special client providers.
  */
 public final class BuiltinProviders {
 

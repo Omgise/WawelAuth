@@ -165,7 +165,7 @@ public class MixinAbstractClientPlayer {
         ResourceLocation resolved = client.getTextureResolver()
             .getSkin(uuid, self.getCommandSenderName(), TextureRequest.DEFAULT);
         if (resolved != null && !resolved.equals(WawelTextureResolver.getDefaultSkin())
-            && !resolved.equals(WawelTextureResolver.LEGACY_STEVE)) {
+            && !resolved.equals(WawelTextureResolver.getLegacyDefaultSkin())) {
             cir.setReturnValue(resolved);
             return;
         }

@@ -1,0 +1,10 @@
+{
+  "name": "Mojang",
+  "apiRoot": "https://authserver.mojang.com",
+  "authServerUrl": "https://authserver.mojang.com",
+  "sessionServerUrl": "https://sessionserver.mojang.com",
+  "servicesUrl": "https://api.minecraftservices.com",
+  "skinDomains": [
+    "textures.minecraft.net"
+  ]
+}

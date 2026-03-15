@@ -91,6 +91,10 @@ public class WawelTextureResolver {
         return SkinLayers3DConfig.modernSkinSupport ? MODERN_STEVE : LEGACY_STEVE;
     }
 
+    public static ResourceLocation getLegacyDefaultSkin() {
+        return LEGACY_STEVE;
+    }
+
     public static ResourceLocation getDefaultCape() {
         return DEFAULT_CAPE;
     }

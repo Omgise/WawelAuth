@@ -1185,9 +1185,9 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         }
 
         final String oldName = provider.getName();
-        final boolean builtIn = provider.getType() == ProviderType.BUILTIN;
+        final boolean managedProvider = provider.getType() != ProviderType.CUSTOM;
         final String[] statusText = {
-            builtIn ? GuiText.tr("wawelauth.gui.account_manager.provider_builtin_locked") : "" };
+            managedProvider ? GuiText.tr("wawelauth.gui.account_manager.provider_managed_locked") : "" };
 
         TextFieldWidget nameField = new TextFieldWidget()
             .hintText(GuiText.tr("wawelauth.gui.account_manager.provider_name"));
@@ -1196,13 +1196,13 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
             .setMaxLength(32)
             .margin(0, 2);
         nameField.setText(oldName);
-        nameField.setEnabled(!builtIn);
+        nameField.setEnabled(!managedProvider);
 
         ButtonWidget<?> saveNameBtn = new ButtonWidget<>();
         saveNameBtn.size(88, 18)
             .onMousePressed(btn -> {
-                if (builtIn) {
-                    statusText[0] = GuiText.tr("wawelauth.gui.account_manager.provider_builtin_rename_forbidden");
+                if (managedProvider) {
+                    statusText[0] = GuiText.tr("wawelauth.gui.account_manager.provider_managed_rename_forbidden");
                     return true;
                 }
 
@@ -1233,13 +1233,13 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                 return true;
             });
         GuiText.fitButtonLabel(saveNameBtn, 88, "wawelauth.gui.account_manager.save_name");
-        saveNameBtn.setEnabled(!builtIn);
+        saveNameBtn.setEnabled(!managedProvider);
 
         ButtonWidget<?> deleteProviderBtn = new ButtonWidget<>();
         deleteProviderBtn.size(98, 18)
             .onMousePressed(btn -> {
-                if (builtIn) {
-                    statusText[0] = GuiText.tr("wawelauth.gui.account_manager.provider_builtin_remove_forbidden");
+                if (managedProvider) {
+                    statusText[0] = GuiText.tr("wawelauth.gui.account_manager.provider_managed_remove_forbidden");
                     return true;
                 }
 
@@ -1264,7 +1264,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
                 return true;
             });
         GuiText.fitButtonLabel(deleteProviderBtn, 98, "wawelauth.gui.account_manager.delete_provider");
-        deleteProviderBtn.setEnabled(!builtIn);
+        deleteProviderBtn.setEnabled(!managedProvider);
 
         boolean offlineBuiltin = BuiltinProviders.isOfflineProvider(oldName);
         ButtonWidget<?> proxySettingsBtn = new ButtonWidget<>();
@@ -3147,7 +3147,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
     }
 
     private boolean shouldShowProviderInGeneralList(ClientProvider provider) {
-        return provider != null && (provider.getType() == ProviderType.BUILTIN || provider.isManualEntry());
+        return provider != null && (provider.getType() != ProviderType.CUSTOM || provider.isManualEntry());
     }
 
     private static void addProviderTooltip(ButtonWidget<?> button, ClientProvider provider, String providerName,

@@ -1,11 +1,11 @@
 package org.fentanylsolutions.wawelauth.wawelclient.data;
 
 /**
- * Distinguishes built-in providers from user-added custom ones.
- * <p>
- * BUILTIN providers (e.g. Mojang) cannot be removed or edited.
+ * Distinguishes offline built-ins, config-backed defaults, and user-added
+ * custom providers.
  */
 public enum ProviderType {
     BUILTIN,
+    DEFAULT,
     CUSTOM
 }

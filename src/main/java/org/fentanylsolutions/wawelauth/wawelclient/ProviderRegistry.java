@@ -1,15 +1,28 @@
 package org.fentanylsolutions.wawelauth.wawelclient;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.net.ConnectException;
 import java.net.HttpURLConnection;
 import java.net.NoRouteToHostException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ClientProvider;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxySettings;
@@ -20,25 +33,32 @@ import org.fentanylsolutions.wawelauth.wawelclient.http.YggdrasilRequestExceptio
 import org.fentanylsolutions.wawelauth.wawelclient.storage.ClientProviderDAO;
 import org.fentanylsolutions.wawelauth.wawelcore.util.NetworkAddressUtil;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * Manages authentication providers.
  * <p>
- * Ensures the built-in Mojang provider always exists. Provides methods
- * to add custom providers (with ALI discovery) and remove them.
+ * Ensures local config-backed default providers plus the special offline
+ * provider exist. Provides methods to add custom providers (with ALI
+ * discovery) and remove them.
  */
 public class ProviderRegistry {
 
-    private static final String MOJANG_API_ROOT = "https://authserver.mojang.com";
-    private static final String MOJANG_AUTH_URL = "https://authserver.mojang.com";
-    private static final String MOJANG_SESSION_URL = "https://sessionserver.mojang.com";
-    private static final String MOJANG_SERVICES_URL = "https://api.minecraftservices.com";
-    private static final String MOJANG_SKIN_DOMAINS = "[\"textures.minecraft.net\"]";
+    private static final String DEFAULT_PROVIDER_DIR_NAME = "default-providers";
     private static final String OFFLINE_API_ROOT = "offline://account";
     private static final String OFFLINE_AUTH_URL = OFFLINE_API_ROOT + "/authserver";
     private static final String OFFLINE_SESSION_URL = OFFLINE_API_ROOT + "/sessionserver";
     private static final int PROXY_CONNECT_TIMEOUT_MS = 10_000;
+    private static final Map<String, String> SEEDED_DEFAULT_PROVIDER_RESOURCES;
+
+    static {
+        Map<String, String> resources = new LinkedHashMap<>();
+        resources.put("microsoft.json", "/assets/wawelauth/default-providers/microsoft.json");
+        SEEDED_DEFAULT_PROVIDER_RESOURCES = Collections.unmodifiableMap(resources);
+    }
 
     private final ClientProviderDAO providerDAO;
     private final YggdrasilHttpClient httpClient;
@@ -49,24 +69,11 @@ public class ProviderRegistry {
     }
 
     /**
-     * Ensures the built-in Mojang provider exists in the database.
-     * Called once during WawelClient startup.
+     * Sync config-backed default providers and ensure the special offline
+     * provider exists. Called once during WawelClient startup.
      */
-    public void ensureBuiltinProviders() {
-        if (providerDAO.findByName(BuiltinProviders.MOJANG_PROVIDER_NAME) == null) {
-            ClientProvider mojang = new ClientProvider();
-            mojang.setName(BuiltinProviders.MOJANG_PROVIDER_NAME);
-            mojang.setType(ProviderType.BUILTIN);
-            mojang.setApiRoot(MOJANG_API_ROOT);
-            mojang.setAuthServerUrl(MOJANG_AUTH_URL);
-            mojang.setSessionServerUrl(MOJANG_SESSION_URL);
-            mojang.setServicesUrl(MOJANG_SERVICES_URL);
-            mojang.setSkinDomains(MOJANG_SKIN_DOMAINS);
-            mojang.setCreatedAt(System.currentTimeMillis());
-            mojang.setManualEntry(true);
-            providerDAO.create(mojang);
-            WawelAuth.LOG.info("Created built-in Mojang provider");
-        }
+    public void ensureDefaultProviders() {
+        syncDiskDefaultProviders();
         if (providerDAO.findByName(BuiltinProviders.OFFLINE_PROVIDER_NAME) == null) {
             ClientProvider offline = new ClientProvider();
             offline.setName(BuiltinProviders.OFFLINE_PROVIDER_NAME);
@@ -80,6 +87,66 @@ public class ProviderRegistry {
             providerDAO.create(offline);
             WawelAuth.LOG.info("Created built-in offline account provider");
         }
+    }
+
+    private void syncDiskDefaultProviders() {
+        File directory = ensureDefaultProviderDirectory();
+        seedDefaultProviderDirectoryIfNeeded(directory);
+
+        File[] files = directory.listFiles(
+            (dir, name) -> name != null && name.toLowerCase()
+                .endsWith(".json"));
+        if (files == null || files.length == 0) {
+            WawelAuth.LOG.warn(
+                "No default providers found in {}. Default Microsoft/provider presets will be unavailable.",
+                directory.getAbsolutePath());
+            return;
+        }
+
+        Arrays.sort(
+            files,
+            (a, b) -> a.getName()
+                .compareToIgnoreCase(b.getName()));
+        int synced = 0;
+        for (File file : files) {
+            DefaultProviderDefinition definition = loadDefaultProviderDefinition(file);
+            if (definition == null) {
+                continue;
+            }
+
+            ClientProvider desired;
+            try {
+                desired = toDefaultProvider(definition);
+            } catch (IllegalArgumentException e) {
+                WawelAuth.LOG.warn("Skipping default provider '{}': {}", file.getAbsolutePath(), e.getMessage());
+                continue;
+            }
+
+            upsertDefaultProvider(desired);
+            synced++;
+        }
+
+        if (synced > 0) {
+            WawelAuth.LOG.info("Synced {} default provider(s) from {}", synced, directory.getAbsolutePath());
+        }
+    }
+
+    private void upsertDefaultProvider(ClientProvider desired) {
+        ClientProvider existing = providerDAO.findByName(desired.getName());
+        if (existing == null) {
+            providerDAO.create(desired);
+            WawelAuth.LOG.info("Created default provider '{}' from local config", desired.getName());
+            return;
+        }
+
+        desired.setCreatedAt(existing.getCreatedAt() > 0L ? existing.getCreatedAt() : desired.getCreatedAt());
+        desired.setProxyEnabled(existing.isProxyEnabled());
+        desired.setProxyType(existing.getProxyType());
+        desired.setProxyHost(existing.getProxyHost());
+        desired.setProxyPort(existing.getProxyPort());
+        desired.setProxyUsername(existing.getProxyUsername());
+        desired.setProxyPassword(existing.getProxyPassword());
+        providerDAO.update(desired);
     }
 
     /**
@@ -193,8 +260,8 @@ public class ProviderRegistry {
         if (provider == null) {
             throw new IllegalArgumentException("Provider not found: " + name);
         }
-        if (provider.getType() == ProviderType.BUILTIN) {
-            throw new IllegalArgumentException("Cannot remove built-in provider: " + name);
+        if (provider.getType() != ProviderType.CUSTOM) {
+            throw new IllegalArgumentException("Cannot remove managed provider: " + name);
         }
         // FK ON DELETE CASCADE handles account cleanup
         providerDAO.delete(name);
@@ -229,8 +296,8 @@ public class ProviderRegistry {
         if (provider == null) {
             throw new IllegalArgumentException("Provider not found: " + oldTrimmed);
         }
-        if (provider.getType() == ProviderType.BUILTIN) {
-            throw new IllegalArgumentException("Cannot rename built-in provider: " + oldTrimmed);
+        if (provider.getType() != ProviderType.CUSTOM) {
+            throw new IllegalArgumentException("Cannot rename managed provider: " + oldTrimmed);
         }
 
         providerDAO.rename(oldTrimmed, newTrimmed);
@@ -321,6 +388,155 @@ public class ProviderRegistry {
         }
     }
 
+    private static ClientProvider toDefaultProvider(DefaultProviderDefinition definition) {
+        String name = trimToNull(definition.name);
+        if (name == null) {
+            throw new IllegalArgumentException("Missing provider name");
+        }
+
+        String apiRoot = trimToNull(definition.apiRoot);
+        String authServerUrl = trimToNull(definition.authServerUrl);
+        String sessionServerUrl = trimToNull(definition.sessionServerUrl);
+        String servicesUrl = trimToNull(definition.servicesUrl);
+
+        if (apiRoot != null) {
+            String base = stripTrailingSlash(apiRoot);
+            if (authServerUrl == null) {
+                authServerUrl = base + "/authserver";
+            }
+            if (sessionServerUrl == null) {
+                sessionServerUrl = base + "/sessionserver";
+            }
+            if (servicesUrl == null) {
+                servicesUrl = base;
+            }
+        }
+
+        if (authServerUrl == null || sessionServerUrl == null) {
+            throw new IllegalArgumentException("Default provider must define apiRoot or explicit auth/session URLs");
+        }
+
+        String publicKeyBase64 = extractKeyBase64(
+            firstNonBlank(definition.publicKeyBase64, definition.signaturePublickey, definition.publicKey));
+        String fingerprint = trimToNull(definition.publicKeyFingerprint);
+        if (fingerprint == null && publicKeyBase64 != null) {
+            fingerprint = computeKeyFingerprint(publicKeyBase64);
+        }
+
+        ClientProvider provider = new ClientProvider();
+        provider.setName(name);
+        provider.setType(ProviderType.DEFAULT);
+        provider.setApiRoot(apiRoot);
+        provider.setAuthServerUrl(authServerUrl);
+        provider.setSessionServerUrl(sessionServerUrl);
+        provider.setServicesUrl(servicesUrl);
+        provider.setSkinDomains(toSkinDomainsJson(definition.skinDomains));
+        provider.setPublicKeyBase64(publicKeyBase64);
+        provider.setPublicKeyFingerprint(fingerprint);
+        provider.setCreatedAt(System.currentTimeMillis());
+        provider.setManualEntry(false);
+        return provider;
+    }
+
+    private static String toSkinDomainsJson(List<String> skinDomains) {
+        if (skinDomains == null || skinDomains.isEmpty()) {
+            return null;
+        }
+        JsonArray array = new JsonArray();
+        for (String domain : skinDomains) {
+            String normalized = trimToNull(domain);
+            if (normalized != null) {
+                array.add(new com.google.gson.JsonPrimitive(normalized));
+            }
+        }
+        return array.size() > 0 ? array.toString() : null;
+    }
+
+    private static DefaultProviderDefinition loadDefaultProviderDefinition(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+        try (Reader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+            JsonElement root = new JsonParser().parse(reader);
+            if (root == null || !root.isJsonObject()) {
+                WawelAuth.LOG
+                    .warn("Skipping default provider '{}': root must be a JSON object", file.getAbsolutePath());
+                return null;
+            }
+            return DefaultProviderDefinition.fromJson(root.getAsJsonObject());
+        } catch (Exception e) {
+            WawelAuth.LOG.warn("Failed to read default provider '{}': {}", file.getAbsolutePath(), e.getMessage());
+            return null;
+        }
+    }
+
+    private static File ensureDefaultProviderDirectory() {
+        File root = Config.getLocalConfigDir();
+        if (root == null) {
+            root = Config.getConfigDir();
+        }
+        File directory = new File(root, DEFAULT_PROVIDER_DIR_NAME);
+        if (!directory.exists() && !directory.mkdirs()) {
+            WawelAuth.LOG.warn("Failed to create default provider directory '{}'", directory.getAbsolutePath());
+        }
+        return directory;
+    }
+
+    private static void seedDefaultProviderDirectoryIfNeeded(File directory) {
+        if (directory == null) {
+            return;
+        }
+        File[] jsonFiles = directory.listFiles(
+            (dir, name) -> name != null && name.toLowerCase()
+                .endsWith(".json"));
+        if (jsonFiles != null && jsonFiles.length > 0) {
+            return;
+        }
+
+        for (Map.Entry<String, String> entry : SEEDED_DEFAULT_PROVIDER_RESOURCES.entrySet()) {
+            copyBundledFile(entry.getValue(), new File(directory, entry.getKey()));
+        }
+    }
+
+    private static void copyBundledFile(String resourcePath, File destination) {
+        File parent = destination.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            WawelAuth.LOG.warn("Failed to create default provider directory '{}'", parent.getAbsolutePath());
+            return;
+        }
+
+        byte[] data = loadClasspathBytes(resourcePath);
+        if (data == null) {
+            WawelAuth.LOG.warn("Missing bundled default provider resource '{}'", resourcePath);
+            return;
+        }
+
+        try {
+            java.nio.file.Files.write(destination.toPath(), data);
+        } catch (IOException e) {
+            WawelAuth.LOG
+                .warn("Failed to seed default provider file '{}': {}", destination.getAbsolutePath(), e.getMessage());
+        }
+    }
+
+    private static byte[] loadClasspathBytes(String path) {
+        try (InputStream in = ProviderRegistry.class.getResourceAsStream(path)) {
+            if (in == null) {
+                return null;
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return out.toByteArray();
+        } catch (IOException e) {
+            WawelAuth.LOG.warn("Failed to read bundled default provider resource '{}': {}", path, e.getMessage());
+            return null;
+        }
+    }
+
     private static ProviderProxySettings normalizeProxySettings(ProviderProxySettings settings) {
         ProviderProxySettings normalized = new ProviderProxySettings();
         if (settings == null) {
@@ -380,6 +596,26 @@ public class ProviderRegistry {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private static String stripTrailingSlash(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    private static String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String normalized = trimToNull(value);
+            if (normalized != null) {
+                return normalized;
+            }
+        }
+        return null;
     }
 
     private ProbeLine probeProxyEndpoint(ProviderProxySettings settings) {
@@ -535,5 +771,73 @@ public class ProviderRegistry {
         NEUTRAL,
         SUCCESS,
         ERROR
+    }
+
+    private static final class DefaultProviderDefinition {
+
+        private String name;
+        private String apiRoot;
+        private String authServerUrl;
+        private String sessionServerUrl;
+        private String servicesUrl;
+        private List<String> skinDomains;
+        private String publicKeyBase64;
+        private String publicKeyFingerprint;
+        private String signaturePublickey;
+        private String publicKey;
+
+        private static DefaultProviderDefinition fromJson(JsonObject json) {
+            DefaultProviderDefinition definition = new DefaultProviderDefinition();
+            definition.name = optionalString(json, "name");
+            definition.apiRoot = optionalString(json, "apiRoot");
+            definition.authServerUrl = optionalString(json, "authServerUrl");
+            definition.sessionServerUrl = optionalString(json, "sessionServerUrl");
+            definition.servicesUrl = optionalString(json, "servicesUrl");
+            definition.skinDomains = optionalStringList(json, "skinDomains");
+            definition.publicKeyBase64 = optionalString(json, "publicKeyBase64");
+            definition.publicKeyFingerprint = optionalString(json, "publicKeyFingerprint");
+            definition.signaturePublickey = optionalString(json, "signaturePublickey");
+            definition.publicKey = optionalString(json, "publicKey");
+            return definition;
+        }
+
+        private static String optionalString(JsonObject json, String field) {
+            if (json == null || field == null
+                || !json.has(field)
+                || json.get(field)
+                    .isJsonNull()) {
+                return null;
+            }
+            try {
+                return json.get(field)
+                    .getAsString();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private static List<String> optionalStringList(JsonObject json, String field) {
+            if (json == null || field == null
+                || !json.has(field)
+                || json.get(field)
+                    .isJsonNull()) {
+                return Collections.emptyList();
+            }
+            try {
+                JsonArray array = json.getAsJsonArray(field);
+                List<String> values = new ArrayList<>();
+                for (int i = 0; i < array.size(); i++) {
+                    String value = trimToNull(
+                        array.get(i)
+                            .getAsString());
+                    if (value != null) {
+                        values.add(value);
+                    }
+                }
+                return values;
+            } catch (Exception e) {
+                return Collections.emptyList();
+            }
+        }
     }
 }
