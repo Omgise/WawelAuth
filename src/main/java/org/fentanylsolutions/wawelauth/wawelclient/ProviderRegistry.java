@@ -62,6 +62,7 @@ public class ProviderRegistry {
 
     private final ClientProviderDAO providerDAO;
     private final YggdrasilHttpClient httpClient;
+    private final Map<String, DefaultProviderDefinition> runtimeDefaultOverrides = new LinkedHashMap<>();
 
     public ProviderRegistry(ClientProviderDAO providerDAO, YggdrasilHttpClient httpClient) {
         this.providerDAO = providerDAO;
@@ -108,6 +109,7 @@ public class ProviderRegistry {
             (a, b) -> a.getName()
                 .compareToIgnoreCase(b.getName()));
         int synced = 0;
+        Map<String, DefaultProviderDefinition> loadedOverrides = new LinkedHashMap<>();
         for (File file : files) {
             DefaultProviderDefinition definition = loadDefaultProviderDefinition(file);
             if (definition == null) {
@@ -123,8 +125,15 @@ public class ProviderRegistry {
             }
 
             upsertDefaultProvider(desired);
+            loadedOverrides.put(desired.getName(), definition);
             synced++;
         }
+
+        synchronized (runtimeDefaultOverrides) {
+            runtimeDefaultOverrides.clear();
+            runtimeDefaultOverrides.putAll(loadedOverrides);
+        }
+        releaseMissingDefaultProviders(loadedOverrides.keySet());
 
         if (synced > 0) {
             WawelAuth.LOG.info("Synced {} default provider(s) from {}", synced, directory.getAbsolutePath());
@@ -147,6 +156,58 @@ public class ProviderRegistry {
         desired.setProxyUsername(existing.getProxyUsername());
         desired.setProxyPassword(existing.getProxyPassword());
         providerDAO.update(desired);
+    }
+
+    private void releaseMissingDefaultProviders(java.util.Collection<String> activeDefaultNames) {
+        List<ClientProvider> allProviders = providerDAO.listAll();
+        for (ClientProvider provider : allProviders) {
+            if (provider == null || provider.getType() != ProviderType.DEFAULT) {
+                continue;
+            }
+            if (activeDefaultNames != null && activeDefaultNames.contains(provider.getName())) {
+                continue;
+            }
+
+            ClientProvider released = copyProvider(provider);
+            released.setType(ProviderType.CUSTOM);
+            released.setManualEntry(true);
+            providerDAO.update(released);
+            WawelAuth.LOG
+                .info("Released missing default provider '{}' to custom/manual management", provider.getName());
+        }
+    }
+
+    public ClientProvider applyRuntimeOverrides(ClientProvider provider) {
+        if (provider == null || provider.getType() != ProviderType.DEFAULT) {
+            return provider;
+        }
+
+        DefaultProviderDefinition definition;
+        synchronized (runtimeDefaultOverrides) {
+            definition = runtimeDefaultOverrides.get(provider.getName());
+        }
+        if (definition == null) {
+            return provider;
+        }
+
+        ClientProvider effective = copyProvider(provider);
+        ClientProvider defaults = toDefaultProvider(definition);
+        effective.setType(defaults.getType());
+        effective.setApiRoot(defaults.getApiRoot());
+        effective.setAuthServerUrl(defaults.getAuthServerUrl());
+        effective.setSessionServerUrl(defaults.getSessionServerUrl());
+        effective.setServicesUrl(defaults.getServicesUrl());
+        effective.setMsAuthorizeUrl(defaults.getMsAuthorizeUrl());
+        effective.setMsTokenUrl(defaults.getMsTokenUrl());
+        effective.setXblAuthUrl(defaults.getXblAuthUrl());
+        effective.setXstsAuthUrl(defaults.getXstsAuthUrl());
+        effective.setMinecraftAuthUrl(defaults.getMinecraftAuthUrl());
+        effective.setMinecraftProfileUrl(defaults.getMinecraftProfileUrl());
+        effective.setSkinDomains(defaults.getSkinDomains());
+        effective.setPublicKeyBase64(defaults.getPublicKeyBase64());
+        effective.setPublicKeyFingerprint(defaults.getPublicKeyFingerprint());
+        effective.setManualEntry(false);
+        return effective;
     }
 
     /**
@@ -395,9 +456,23 @@ public class ProviderRegistry {
         }
 
         String apiRoot = trimToNull(definition.apiRoot);
-        String authServerUrl = trimToNull(definition.authServerUrl);
+        String accountUrl = trimToNull(definition.accountUrl);
+        String explicitAuthServerUrl = trimToNull(definition.authServerUrl);
+        String authServerUrl = null;
         String sessionServerUrl = trimToNull(definition.sessionServerUrl);
         String servicesUrl = trimToNull(definition.servicesUrl);
+        String msAuthorizeUrl = trimToNull(definition.msAuthorizeUrl);
+        String msTokenUrl = trimToNull(definition.msTokenUrl);
+        String xblAuthUrl = trimToNull(definition.xblAuthUrl);
+        String xstsAuthUrl = trimToNull(definition.xstsAuthUrl);
+        String minecraftAuthUrl = trimToNull(definition.minecraftAuthUrl);
+        String minecraftProfileUrl = trimToNull(definition.minecraftProfileUrl);
+
+        if (apiRoot == null) {
+            apiRoot = deriveApiRoot(explicitAuthServerUrl, accountUrl, sessionServerUrl, servicesUrl);
+        }
+
+        authServerUrl = deriveAuthServerUrl(explicitAuthServerUrl, accountUrl, sessionServerUrl, apiRoot);
 
         if (apiRoot != null) {
             String base = stripTrailingSlash(apiRoot);
@@ -412,8 +487,18 @@ public class ProviderRegistry {
             }
         }
 
+        if (servicesUrl != null) {
+            String base = stripTrailingSlash(servicesUrl);
+            if (minecraftAuthUrl == null) {
+                minecraftAuthUrl = base + "/authentication/login_with_xbox";
+            }
+            if (minecraftProfileUrl == null) {
+                minecraftProfileUrl = base + "/minecraft/profile";
+            }
+        }
+
         if (authServerUrl == null || sessionServerUrl == null) {
-            throw new IllegalArgumentException("Default provider must define apiRoot or explicit auth/session URLs");
+            throw new IllegalArgumentException("Default provider must define apiRoot or explicit account/session URLs");
         }
 
         String publicKeyBase64 = extractKeyBase64(
@@ -430,6 +515,12 @@ public class ProviderRegistry {
         provider.setAuthServerUrl(authServerUrl);
         provider.setSessionServerUrl(sessionServerUrl);
         provider.setServicesUrl(servicesUrl);
+        provider.setMsAuthorizeUrl(msAuthorizeUrl);
+        provider.setMsTokenUrl(msTokenUrl);
+        provider.setXblAuthUrl(xblAuthUrl);
+        provider.setXstsAuthUrl(xstsAuthUrl);
+        provider.setMinecraftAuthUrl(minecraftAuthUrl);
+        provider.setMinecraftProfileUrl(minecraftProfileUrl);
         provider.setSkinDomains(toSkinDomainsJson(definition.skinDomains));
         provider.setPublicKeyBase64(publicKeyBase64);
         provider.setPublicKeyFingerprint(fingerprint);
@@ -450,6 +541,102 @@ public class ProviderRegistry {
             }
         }
         return array.size() > 0 ? array.toString() : null;
+    }
+
+    private static String deriveApiRoot(String authUrl, String accountUrl, String sessionUrl, String servicesUrl) {
+        String normalizedServices = stripTrailingSlash(trimToNull(servicesUrl));
+        if (normalizedServices != null) {
+            if (normalizedServices.endsWith("/minecraftservices")) {
+                return normalizedServices.substring(0, normalizedServices.length() - "/minecraftservices".length());
+            }
+            return normalizedServices;
+        }
+
+        String normalizedAuth = stripTrailingSlash(trimToNull(authUrl));
+        if (normalizedAuth != null && normalizedAuth.endsWith("/authserver")) {
+            return normalizedAuth.substring(0, normalizedAuth.length() - "/authserver".length());
+        }
+
+        String normalizedAccount = stripTrailingSlash(trimToNull(accountUrl));
+        if (normalizedAccount != null && normalizedAccount.endsWith("/authserver")) {
+            return normalizedAccount.substring(0, normalizedAccount.length() - "/authserver".length());
+        }
+
+        String normalizedSession = stripTrailingSlash(trimToNull(sessionUrl));
+        if (normalizedSession != null && normalizedSession.endsWith("/sessionserver")) {
+            return normalizedSession.substring(0, normalizedSession.length() - "/sessionserver".length());
+        }
+
+        return null;
+    }
+
+    private static String deriveAuthServerUrl(String authUrl, String accountUrl, String sessionUrl, String apiRoot) {
+        String normalizedAuth = stripTrailingSlash(trimToNull(authUrl));
+        String normalizedAccount = stripTrailingSlash(trimToNull(accountUrl));
+        String normalizedSession = stripTrailingSlash(trimToNull(sessionUrl));
+        String normalizedApiRoot = stripTrailingSlash(trimToNull(apiRoot));
+
+        if (normalizedAuth != null) {
+            return normalizedAuth;
+        }
+        if (isHost(normalizedAccount, "api.mojang.com") || isHost(normalizedSession, "sessionserver.mojang.com")) {
+            return "https://authserver.mojang.com";
+        }
+        if (normalizedSession != null && normalizedSession.endsWith("/sessionserver")) {
+            return normalizedSession.substring(0, normalizedSession.length() - "/sessionserver".length())
+                + "/authserver";
+        }
+        if (normalizedAccount != null && normalizedAccount.endsWith("/authserver")) {
+            return normalizedAccount;
+        }
+        if (normalizedApiRoot != null) {
+            return normalizedApiRoot + "/authserver";
+        }
+        return normalizedAccount;
+    }
+
+    private static boolean isHost(String url, String expectedHost) {
+        if (url == null) {
+            return false;
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            String host = uri.getHost();
+            return host != null && host.equalsIgnoreCase(expectedHost);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static ClientProvider copyProvider(ClientProvider provider) {
+        if (provider == null) {
+            return null;
+        }
+        ClientProvider copy = new ClientProvider();
+        copy.setName(provider.getName());
+        copy.setType(provider.getType());
+        copy.setApiRoot(provider.getApiRoot());
+        copy.setAuthServerUrl(provider.getAuthServerUrl());
+        copy.setSessionServerUrl(provider.getSessionServerUrl());
+        copy.setServicesUrl(provider.getServicesUrl());
+        copy.setMsAuthorizeUrl(provider.getMsAuthorizeUrl());
+        copy.setMsTokenUrl(provider.getMsTokenUrl());
+        copy.setXblAuthUrl(provider.getXblAuthUrl());
+        copy.setXstsAuthUrl(provider.getXstsAuthUrl());
+        copy.setMinecraftAuthUrl(provider.getMinecraftAuthUrl());
+        copy.setMinecraftProfileUrl(provider.getMinecraftProfileUrl());
+        copy.setSkinDomains(provider.getSkinDomains());
+        copy.setPublicKeyBase64(provider.getPublicKeyBase64());
+        copy.setPublicKeyFingerprint(provider.getPublicKeyFingerprint());
+        copy.setCreatedAt(provider.getCreatedAt());
+        copy.setManualEntry(provider.isManualEntry());
+        copy.setProxyEnabled(provider.isProxyEnabled());
+        copy.setProxyType(provider.getProxyType());
+        copy.setProxyHost(provider.getProxyHost());
+        copy.setProxyPort(provider.getProxyPort());
+        copy.setProxyUsername(provider.getProxyUsername());
+        copy.setProxyPassword(provider.getProxyPassword());
+        return copy;
     }
 
     private static DefaultProviderDefinition loadDefaultProviderDefinition(File file) {
@@ -777,9 +964,17 @@ public class ProviderRegistry {
 
         private String name;
         private String apiRoot;
+        private String accountUrl;
         private String authServerUrl;
         private String sessionServerUrl;
         private String servicesUrl;
+        private Integer cacheTtlSeconds;
+        private String msAuthorizeUrl;
+        private String msTokenUrl;
+        private String xblAuthUrl;
+        private String xstsAuthUrl;
+        private String minecraftAuthUrl;
+        private String minecraftProfileUrl;
         private List<String> skinDomains;
         private String publicKeyBase64;
         private String publicKeyFingerprint;
@@ -790,9 +985,17 @@ public class ProviderRegistry {
             DefaultProviderDefinition definition = new DefaultProviderDefinition();
             definition.name = optionalString(json, "name");
             definition.apiRoot = optionalString(json, "apiRoot");
+            definition.accountUrl = optionalString(json, "accountUrl");
             definition.authServerUrl = optionalString(json, "authServerUrl");
             definition.sessionServerUrl = optionalString(json, "sessionServerUrl");
             definition.servicesUrl = optionalString(json, "servicesUrl");
+            definition.cacheTtlSeconds = optionalInteger(json, "cacheTtlSeconds");
+            definition.msAuthorizeUrl = optionalString(json, "msAuthorizeUrl");
+            definition.msTokenUrl = optionalString(json, "msTokenUrl");
+            definition.xblAuthUrl = optionalString(json, "xblAuthUrl");
+            definition.xstsAuthUrl = optionalString(json, "xstsAuthUrl");
+            definition.minecraftAuthUrl = optionalString(json, "minecraftAuthUrl");
+            definition.minecraftProfileUrl = optionalString(json, "minecraftProfileUrl");
             definition.skinDomains = optionalStringList(json, "skinDomains");
             definition.publicKeyBase64 = optionalString(json, "publicKeyBase64");
             definition.publicKeyFingerprint = optionalString(json, "publicKeyFingerprint");
@@ -837,6 +1040,22 @@ public class ProviderRegistry {
                 return values;
             } catch (Exception e) {
                 return Collections.emptyList();
+            }
+        }
+
+        private static Integer optionalInteger(JsonObject json, String field) {
+            if (json == null || field == null
+                || !json.has(field)
+                || json.get(field)
+                    .isJsonNull()) {
+                return null;
+            }
+            try {
+                return Integer.valueOf(
+                    json.get(field)
+                        .getAsInt());
+            } catch (Exception e) {
+                return null;
             }
         }
     }

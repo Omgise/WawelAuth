@@ -49,6 +49,36 @@ public class ClientProvider {
     private String servicesUrl;
 
     /**
+     * Optional Microsoft browser OAuth authorize URL override.
+     */
+    private String msAuthorizeUrl;
+
+    /**
+     * Optional Microsoft browser OAuth token URL override.
+     */
+    private String msTokenUrl;
+
+    /**
+     * Optional Xbox Live auth URL override.
+     */
+    private String xblAuthUrl;
+
+    /**
+     * Optional XSTS auth URL override.
+     */
+    private String xstsAuthUrl;
+
+    /**
+     * Optional Minecraft services auth URL override.
+     */
+    private String minecraftAuthUrl;
+
+    /**
+     * Optional Minecraft profile URL override.
+     */
+    private String minecraftProfileUrl;
+
+    /**
      * Skin domains from the provider's metadata, stored as a JSON array string.
      * E.g. '["textures.minecraft.net",".example.com"]'.
      */
@@ -217,6 +247,54 @@ public class ClientProvider {
 
     public void setServicesUrl(String servicesUrl) {
         this.servicesUrl = servicesUrl;
+    }
+
+    public String getMsAuthorizeUrl() {
+        return msAuthorizeUrl;
+    }
+
+    public void setMsAuthorizeUrl(String msAuthorizeUrl) {
+        this.msAuthorizeUrl = msAuthorizeUrl;
+    }
+
+    public String getMsTokenUrl() {
+        return msTokenUrl;
+    }
+
+    public void setMsTokenUrl(String msTokenUrl) {
+        this.msTokenUrl = msTokenUrl;
+    }
+
+    public String getXblAuthUrl() {
+        return xblAuthUrl;
+    }
+
+    public void setXblAuthUrl(String xblAuthUrl) {
+        this.xblAuthUrl = xblAuthUrl;
+    }
+
+    public String getXstsAuthUrl() {
+        return xstsAuthUrl;
+    }
+
+    public void setXstsAuthUrl(String xstsAuthUrl) {
+        this.xstsAuthUrl = xstsAuthUrl;
+    }
+
+    public String getMinecraftAuthUrl() {
+        return minecraftAuthUrl;
+    }
+
+    public void setMinecraftAuthUrl(String minecraftAuthUrl) {
+        this.minecraftAuthUrl = minecraftAuthUrl;
+    }
+
+    public String getMinecraftProfileUrl() {
+        return minecraftProfileUrl;
+    }
+
+    public void setMinecraftProfileUrl(String minecraftProfileUrl) {
+        this.minecraftProfileUrl = minecraftProfileUrl;
     }
 
     public String getSkinDomains() {

@@ -1,9 +1,15 @@
 {
   "name": "Mojang",
-  "apiRoot": "https://authserver.mojang.com",
-  "authServerUrl": "https://authserver.mojang.com",
+  "accountUrl": "https://authserver.mojang.com",
   "sessionServerUrl": "https://sessionserver.mojang.com",
   "servicesUrl": "https://api.minecraftservices.com",
+  "cacheTtlSeconds": 300,
+  "msAuthorizeUrl": "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize",
+  "msTokenUrl": "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+  "xblAuthUrl": "https://user.auth.xboxlive.com/user/authenticate",
+  "xstsAuthUrl": "https://xsts.auth.xboxlive.com/xsts/authorize",
+  "minecraftAuthUrl": "https://api.minecraftservices.com/authentication/login_with_xbox",
+  "minecraftProfileUrl": "https://api.minecraftservices.com/minecraft/profile",
   "skinDomains": [
     "textures.minecraft.net"
   ]

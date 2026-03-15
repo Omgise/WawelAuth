@@ -829,7 +829,7 @@ public class AccountManager {
             return false;
         }
 
-        String baseUrl = resolveServicesBase(provider);
+        String baseUrl = resolveMetadataBase(provider);
         JsonObject metadata = httpClient.getJson(provider, baseUrl);
         if (metadata == null || !metadata.has("meta")
             || metadata.get("meta")
@@ -859,13 +859,13 @@ public class AccountManager {
         if (provider == null) {
             throw new IllegalArgumentException("Unknown provider: " + providerName);
         }
+        provider = applyRuntimeProviderOverrides(provider);
         if (!BuiltinProviders.isMojangProvider(provider.getName())) {
             throw new IllegalArgumentException("Microsoft login is only supported for the Microsoft provider");
         }
 
         Consumer<String> status = statusSink != null ? statusSink : s -> {};
-        MicrosoftOAuthClient.LoginResult result = microsoftOAuthClient
-            .loginInteractive(provider.getProxySettings(), status);
+        MicrosoftOAuthClient.LoginResult result = microsoftOAuthClient.loginInteractive(provider, status);
 
         long now = System.currentTimeMillis();
         ClientAccount account = new ClientAccount();
@@ -1047,6 +1047,7 @@ public class AccountManager {
     }
 
     private AccountStatus doValidateOrRefreshMicrosoft(ClientAccount account, ClientProvider provider) {
+        provider = applyRuntimeProviderOverrides(provider);
         long now = System.currentTimeMillis();
         account.setLastRefreshAttemptAt(now);
 
@@ -1063,7 +1064,7 @@ public class AccountManager {
         // Step 1: validate by calling Minecraft profile endpoint with current token.
         try {
             MicrosoftOAuthClient.MinecraftProfile profile = microsoftOAuthClient
-                .fetchMinecraftProfile(account.getAccessToken(), provider.getProxySettings());
+                .fetchMinecraftProfile(account.getAccessToken(), provider);
             account.setUserUuid(UuidUtil.toUnsigned(profile.getUuid()));
             account.setProfileUuid(profile.getUuid());
             account.setProfileName(profile.getName());
@@ -1102,7 +1103,7 @@ public class AccountManager {
 
         try {
             MicrosoftOAuthClient.LoginResult refreshed = microsoftOAuthClient
-                .refreshFromToken(account.getRefreshToken(), provider.getProxySettings(), s -> {});
+                .refreshFromToken(account.getRefreshToken(), provider, s -> {});
 
             account.setAccessToken(refreshed.getMinecraftAccessToken());
             account.setRefreshToken(refreshed.getMicrosoftRefreshToken());
@@ -1144,6 +1145,15 @@ public class AccountManager {
             && !account.getRefreshToken()
                 .trim()
                 .isEmpty();
+    }
+
+    private static ClientProvider applyRuntimeProviderOverrides(ClientProvider provider) {
+        WawelClient client = WawelClient.instance();
+        if (client == null || client.getProviderRegistry() == null) {
+            return provider;
+        }
+        return client.getProviderRegistry()
+            .applyRuntimeOverrides(provider);
     }
 
     private static boolean isAuthFailureStatus(int status) {
@@ -1263,6 +1273,18 @@ public class AccountManager {
         if (base == null || base.trim()
             .isEmpty()) {
             throw new IllegalArgumentException("Provider has no services/api base URL.");
+        }
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        return base;
+    }
+
+    private static String resolveMetadataBase(ClientProvider provider) {
+        String base = provider.getApiRoot();
+        if (base == null || base.trim()
+            .isEmpty()) {
+            base = resolveServicesBase(provider);
         }
         while (base.endsWith("/")) {
             base = base.substring(0, base.length() - 1);
