@@ -71,20 +71,25 @@ public final class LocalSessionVerifier {
             return vanillaService.hasJoinedServer(user, serverId);
         }
 
+        // Try local auth first if enabled
         if (localEnabled) {
             if (WawelServer.instance() == null) {
                 WawelAuth.LOG.warn("WawelAuth local auth is enabled but server module is not running");
-                return null;
+            } else {
+                GameProfile localResult = queryLocalHasJoined(user.getName(), serverId);
+                if (localResult != null) {
+                    return localResult;
+                }
             }
-            return queryLocalHasJoined(user.getName(), serverId);
         }
 
+        // Try configured fallback session servers (Mojang must be explicitly listed here to be used)
         GameProfile fallbackResult = queryConfiguredFallbacks(user.getName(), serverId, config);
         if (fallbackResult != null) {
             return fallbackResult;
         }
 
-        return vanillaService.hasJoinedServer(user, serverId);
+        return null;
     }
 
     private static GameProfile queryLocalHasJoined(String username, String serverId)
