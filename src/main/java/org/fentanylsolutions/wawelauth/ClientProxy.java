@@ -9,7 +9,6 @@ import org.fentanylsolutions.wawelauth.client.gui.GuiTransitionScheduler;
 import org.fentanylsolutions.wawelauth.client.gui.WawelAuthKeybind;
 import org.fentanylsolutions.wawelauth.client.render.SkinResolverClientHandler;
 import org.fentanylsolutions.wawelauth.client.render.animatedcape.AnimatedCapeClientHandler;
-import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelPingClientHooks;
 import org.fentanylsolutions.wawelauth.wawelcore.config.LocalConfig;
@@ -24,9 +23,6 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void preInit(FMLPreInitializationEvent event) {
         super.preInit(event);
-
-        // Load skin rendering config before Minecraft client classes start using it.
-        SkinLayers3DConfig.load(Config.getLocalConfigDir());
     }
 
     @Override
@@ -65,6 +61,5 @@ public class ClientProxy extends CommonProxy {
     @Override
     public void onConfigReload() {
         super.onConfigReload();
-        SkinLayers3DConfig.load(Config.getLocalConfigDir());
     }
 }

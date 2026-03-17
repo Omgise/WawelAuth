@@ -21,7 +21,6 @@ import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.util.EnumChatFormatting;
 
-import org.fentanylsolutions.wawelauth.Config;
 import org.fentanylsolutions.wawelauth.WawelAuth;
 import org.fentanylsolutions.wawelauth.client.render.LocalTextureLoader;
 import org.fentanylsolutions.wawelauth.wawelclient.BuiltinProviders;
@@ -36,6 +35,7 @@ import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxySettings;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderProxyType;
 import org.fentanylsolutions.wawelauth.wawelclient.data.ProviderType;
 import org.fentanylsolutions.wawelauth.wawelclient.http.ProviderProxySupport;
+import org.fentanylsolutions.wawelauth.wawelcore.config.ClientConfig;
 import org.fentanylsolutions.wawelauth.wawelcore.data.SkinModel;
 import org.fentanylsolutions.wawelauth.wawelcore.data.UuidUtil;
 import org.fentanylsolutions.wawelauth.wawelcore.util.NetworkAddressUtil;
@@ -2830,8 +2830,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
             return false;
         }
-        return Config.client()
-            .isSkinUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
+        return ClientConfig.isSkinUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }
 
     private boolean isCapeUploadDisabledForSelectedProvider() {
@@ -2839,8 +2838,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
             return false;
         }
-        return Config.client()
-            .isCapeUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
+        return ClientConfig.isCapeUploadDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }
 
     private boolean isAnyTextureUploadEnabled() {
@@ -2852,8 +2850,7 @@ public class AccountManagerScreen extends ParentAwareModularScreen {
         if (ProviderDisplayName.isOfflineProvider(selectedProvider.getName())) {
             return false;
         }
-        return Config.client()
-            .isTextureResetDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
+        return ClientConfig.isTextureResetDisabled(selectedProvider.getName(), selectedProvider.getApiRoot());
     }
 
     private boolean isTextureResetEnabledForSelectedProvider() {

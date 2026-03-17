@@ -7,7 +7,6 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 
 import org.fentanylsolutions.wawelauth.wawelclient.OsConfigDir;
-import org.fentanylsolutions.wawelauth.wawelcore.config.ClientConfig;
 import org.fentanylsolutions.wawelauth.wawelcore.config.FallbackServersConfig;
 import org.fentanylsolutions.wawelauth.wawelcore.config.JsonConfigIO;
 import org.fentanylsolutions.wawelauth.wawelcore.config.LocalConfig;
@@ -29,8 +28,6 @@ import cpw.mods.fml.common.FMLCommonHandler;
  * Data configs (local or OS-shared based on local.json):
  * <p>
  * - server.json (Yggdrasil server module settings)
- * <p>
- * - client.json (client account manager settings)
  */
 public class Config {
 
@@ -39,8 +36,6 @@ public class Config {
     private static final String SERVER_CONFIG_FILE = "server.json";
     private static final String FALLBACK_SERVERS_CONFIG_FILE = "fallback-servers.json";
     private static final String BUNDLED_FALLBACK_SERVERS = "/assets/wawelauth/default-fallback-servers.json";
-    private static final String CLIENT_CONFIG_FILE = "client.json";
-
     private static File minecraftConfigRoot;
     private static File localConfigDir;
     private static File dataConfigDir;
@@ -49,7 +44,6 @@ public class Config {
     private static LocalConfig localConfig;
     private static ServerConfig serverConfig;
     private static FallbackServersConfig fallbackServersConfig;
-    private static ClientConfig clientConfig;
 
     /**
      * Load all configs from config/wawelauth/.
@@ -80,8 +74,6 @@ public class Config {
         }
         fallbackServersConfig = JsonConfigIO.load(fallbackFile, FallbackServersConfig.class);
         serverConfig.setFallbackServers(fallbackServersConfig.getEnabledFallbackServers());
-
-        clientConfig = JsonConfigIO.load(new File(dataConfigDir, CLIENT_CONFIG_FILE), ClientConfig.class);
     }
 
     public static void reload() {
@@ -146,7 +138,7 @@ public class Config {
         boolean legacyUseOs = target.isUseOsConfigDir();
         boolean legacyDebug = target.isDebugMode();
 
-        JsonObject legacyClient = parseJsonObject(new File(localConfigDir, CLIENT_CONFIG_FILE));
+        JsonObject legacyClient = parseJsonObject(new File(localConfigDir, "client.json"));
         if (legacyClient != null) {
             if (legacyClient.has("useOsConfigDir")) {
                 legacyUseOs = getBoolean(legacyClient, "useOsConfigDir", legacyUseOs);
@@ -193,10 +185,6 @@ public class Config {
 
     public static ServerConfig server() {
         return serverConfig;
-    }
-
-    public static ClientConfig client() {
-        return clientConfig;
     }
 
     public static File getLocalConfigDir() {

@@ -1,77 +1,65 @@
 package org.fentanylsolutions.wawelauth.wawelcore.config;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import com.gtnewhorizon.gtnhlib.config.Config;
+
 /**
- * Client-side configuration, stored as client.json in WawelAuth's active data
- * config directory (local or OS-shared depending on local.json).
- * <p>
- * Controls the client account manager behavior (provider defaults, upload
- * policy, etc).
+ * Client-side configuration for account manager behavior (provider defaults,
+ * upload policy, etc).
  */
+@Config(modid = "wawelauth", category = "client")
 public class ClientConfig {
 
-    /**
-     * Provider name to auto-select when none is chosen. Null = ask user. Consumed by wawelclient.
-     */
-    private String defaultProvider = null;
+    @Config.Comment("Provider name to auto-select when none is chosen. Empty = ask user.")
+    @Config.DefaultString("")
+    public static String defaultProvider = "";
 
-    /**
-     * Regex patterns matched against provider API root URLs.
-     * Skin upload is disabled for any provider whose API root matches.
-     */
-    private List<String> disableSkinUpload = defaultDisableSkinUpload();
+    @Config.Comment("Regex patterns matched against provider name/API root. Skin upload is disabled for matches.")
+    @Config.DefaultStringList({ "ely\\.by" })
+    public static String[] disableSkinUpload = { "ely\\.by" };
 
-    /**
-     * Regex patterns matched against provider API root URLs.
-     * Cape upload is disabled for any provider whose API root matches.
-     */
-    private List<String> disableCapeUpload = defaultDisableCapeUpload();
+    @Config.Comment("Regex patterns matched against provider name/API root. Cape upload is disabled for matches.")
+    @Config.DefaultStringList({ "ely\\.by", "^Mojang$" })
+    public static String[] disableCapeUpload = { "ely\\.by", "^Mojang$" };
 
-    /**
-     * Regex patterns matched against provider name or API root URLs.
-     * Texture reset (delete skin/cape) is disabled for any provider that matches.
-     */
-    private List<String> disableTextureReset = defaultDisableTextureReset();
+    @Config.Comment("Regex patterns matched against provider name/API root. Texture reset is disabled for matches.")
+    @Config.DefaultStringList({ "ely\\.by" })
+    public static String[] disableTextureReset = { "ely\\.by" };
 
-    private transient List<Pattern> compiledSkinPatterns;
-    private transient List<Pattern> compiledCapePatterns;
-    private transient List<Pattern> compiledResetPatterns;
+    @Config.Ignore
+    private static transient List<Pattern> compiledSkinPatterns;
+    @Config.Ignore
+    private static transient List<Pattern> compiledCapePatterns;
+    @Config.Ignore
+    private static transient List<Pattern> compiledResetPatterns;
 
-    private static List<String> defaultDisableSkinUpload() {
-        List<String> list = new ArrayList<>();
-        list.add("ely\\.by");
-        return list;
-    }
-
-    private static List<String> defaultDisableCapeUpload() {
-        List<String> list = new ArrayList<>();
-        list.add("ely\\.by");
-        list.add("^Mojang$");
-        return list;
-    }
-
-    private static List<String> defaultDisableTextureReset() {
-        List<String> list = new ArrayList<>();
-        list.add("ely\\.by");
-        return list;
-    }
-
-    public boolean isSkinUploadDisabled(String providerName, String apiRoot) {
+    public static boolean isSkinUploadDisabled(String providerName, String apiRoot) {
         return matchesAny(providerName, apiRoot, getSkinPatterns());
     }
 
-    public boolean isCapeUploadDisabled(String providerName, String apiRoot) {
+    public static boolean isCapeUploadDisabled(String providerName, String apiRoot) {
         return matchesAny(providerName, apiRoot, getCapePatterns());
     }
 
-    public boolean isTextureResetDisabled(String providerName, String apiRoot) {
+    public static boolean isTextureResetDisabled(String providerName, String apiRoot) {
         return matchesAny(providerName, apiRoot, getResetPatterns());
     }
 
-    private boolean matchesAny(String providerName, String apiRoot, List<Pattern> patterns) {
+    /**
+     * Invalidate compiled pattern caches so they are rebuilt on next access.
+     * Call this after modifying the pattern arrays.
+     */
+    public static void invalidatePatternCache() {
+        compiledSkinPatterns = null;
+        compiledCapePatterns = null;
+        compiledResetPatterns = null;
+    }
+
+    private static boolean matchesAny(String providerName, String apiRoot, List<Pattern> patterns) {
         if (patterns.isEmpty()) return false;
         for (Pattern p : patterns) {
             if (providerName != null && p.matcher(providerName)
@@ -87,28 +75,28 @@ public class ClientConfig {
         return false;
     }
 
-    private List<Pattern> getSkinPatterns() {
+    private static List<Pattern> getSkinPatterns() {
         if (compiledSkinPatterns == null) {
             compiledSkinPatterns = compilePatterns(disableSkinUpload);
         }
         return compiledSkinPatterns;
     }
 
-    private List<Pattern> getCapePatterns() {
+    private static List<Pattern> getCapePatterns() {
         if (compiledCapePatterns == null) {
             compiledCapePatterns = compilePatterns(disableCapeUpload);
         }
         return compiledCapePatterns;
     }
 
-    private List<Pattern> getResetPatterns() {
+    private static List<Pattern> getResetPatterns() {
         if (compiledResetPatterns == null) {
             compiledResetPatterns = compilePatterns(disableTextureReset);
         }
         return compiledResetPatterns;
     }
 
-    private static List<Pattern> compilePatterns(List<String> raw) {
+    private static List<Pattern> compilePatterns(String[] raw) {
         List<Pattern> result = new ArrayList<>();
         if (raw == null) return result;
         for (String s : raw) {
@@ -120,40 +108,35 @@ public class ClientConfig {
         return result;
     }
 
-    // --- Existing getters/setters ---
-
-    public String getDefaultProvider() {
+    /**
+     * Returns the default provider, or null if empty/blank.
+     */
+    public static String getDefaultProviderOrNull() {
+        if (defaultProvider == null || defaultProvider.trim()
+            .isEmpty()) {
+            return null;
+        }
         return defaultProvider;
     }
 
-    public void setDefaultProvider(String defaultProvider) {
-        this.defaultProvider = defaultProvider;
+    /**
+     * Returns the disableSkinUpload patterns as a mutable list.
+     */
+    public static List<String> getDisableSkinUploadList() {
+        return new ArrayList<>(Arrays.asList(disableSkinUpload));
     }
 
-    public List<String> getDisableSkinUpload() {
-        return disableSkinUpload;
+    /**
+     * Returns the disableCapeUpload patterns as a mutable list.
+     */
+    public static List<String> getDisableCapeUploadList() {
+        return new ArrayList<>(Arrays.asList(disableCapeUpload));
     }
 
-    public void setDisableSkinUpload(List<String> disableSkinUpload) {
-        this.disableSkinUpload = disableSkinUpload;
-        this.compiledSkinPatterns = null;
-    }
-
-    public List<String> getDisableCapeUpload() {
-        return disableCapeUpload;
-    }
-
-    public void setDisableCapeUpload(List<String> disableCapeUpload) {
-        this.disableCapeUpload = disableCapeUpload;
-        this.compiledCapePatterns = null;
-    }
-
-    public List<String> getDisableTextureReset() {
-        return disableTextureReset;
-    }
-
-    public void setDisableTextureReset(List<String> disableTextureReset) {
-        this.disableTextureReset = disableTextureReset;
-        this.compiledResetPatterns = null;
+    /**
+     * Returns the disableTextureReset patterns as a mutable list.
+     */
+    public static List<String> getDisableTextureResetList() {
+        return new ArrayList<>(Arrays.asList(disableTextureReset));
     }
 }

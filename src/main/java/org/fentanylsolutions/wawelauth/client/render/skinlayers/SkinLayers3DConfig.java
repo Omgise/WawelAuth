@@ -1,104 +1,82 @@
 package org.fentanylsolutions.wawelauth.client.render.skinlayers;
 
-import java.io.File;
-
-import org.fentanylsolutions.wawelauth.WawelAuth;
-import org.fentanylsolutions.wawelauth.wawelcore.config.JsonConfigIO;
+import com.gtnewhorizon.gtnhlib.config.Config;
 
 /**
- * Configuration for client-side skin rendering extras.
- * <p>
- * Loaded from skinlayers.json in WawelAuth's local instance config directory.
+ * Configuration for client-side 3D skin rendering.
  * <p>
  * Field defaults match 3d-Skin-Layers upstream where applicable.
  */
+@Config(modid = "wawelauth", category = "skinlayers")
 public class SkinLayers3DConfig {
 
-    private static final String CONFIG_FILE = "skinlayers.json";
-
-    // Master toggle for all modern skin support: 64x64, slim arms, and HD pass-through.
+    @Config.Comment("Enable modern skin support (64x64, slim arms, HD pass-through).")
+    @Config.DefaultBoolean(true)
+    @Config.RequiresMcRestart
     public static boolean modernSkinSupport = true;
 
+    @Config.Comment("Disable skin overlay rendering when armor is equipped.")
+    @Config.DefaultBoolean(true)
     public static boolean hideOverlayArmor = true;
 
-    // Master toggle for all 3D skin rendering (players + skulls).
+    @Config.Comment("Master toggle for all 3D skin layer rendering (players and skulls).")
+    @Config.DefaultBoolean(true)
     public static boolean enabled = true;
 
-    // Per-part toggles
+    @Config.Comment("Render hat layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableHat = true;
+
+    @Config.Comment("Render jacket layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableJacket = true;
+
+    @Config.Comment("Render left sleeve layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableLeftSleeve = true;
+
+    @Config.Comment("Render right sleeve layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableRightSleeve = true;
+
+    @Config.Comment("Render left pants layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableLeftPants = true;
+
+    @Config.Comment("Render right pants layer as 3D voxels.")
+    @Config.DefaultBoolean(true)
     public static boolean enableRightPants = true;
 
-    // Voxel sizes (slightly larger than base model)
+    @Config.Comment("Base voxel size for limbs and body.")
+    @Config.DefaultFloat(1.15f)
+    @Config.RangeFloat(min = 0.5f, max = 2.0f)
     public static float baseVoxelSize = 1.15f;
+
+    @Config.Comment("Body voxel width scale.")
+    @Config.DefaultFloat(1.05f)
+    @Config.RangeFloat(min = 0.5f, max = 2.0f)
     public static float bodyVoxelWidthSize = 1.05f;
+
+    @Config.Comment("Head voxel size scale.")
+    @Config.DefaultFloat(1.18f)
+    @Config.RangeFloat(min = 0.5f, max = 2.0f)
     public static float headVoxelSize = 1.18f;
+
+    @Config.Comment("Skull voxel size scale.")
+    @Config.DefaultFloat(1.1f)
+    @Config.RangeFloat(min = 0.5f, max = 2.0f)
     public static float skullVoxelSize = 1.1f;
 
-    // LOD: beyond this distance (in blocks) fall back to flat 2D overlays
+    @Config.Comment("Distance in blocks before falling back to flat 2D overlays.")
+    @Config.DefaultInt(14)
+    @Config.RangeInt(min = 1, max = 64)
     public static int renderDistanceLOD = 14;
 
-    // Skull rendering
+    @Config.Comment("Enable 3D voxel rendering for player skulls.")
+    @Config.DefaultBoolean(true)
     public static boolean enableSkulls = true;
 
-    // Fast render: front faces rendered as a single vanilla box, voxels only for sides
+    @Config.Comment("Render front faces as vanilla boxes, voxels for sides only (faster).")
+    @Config.DefaultBoolean(true)
     public static boolean fastRender = true;
-
-    /**
-     * Load config from disk. Call during ClientProxy.init().
-     *
-     * @param configDir the wawelauth config directory (config/wawelauth/)
-     */
-    public static void load(File configDir) {
-        File file = new File(configDir, CONFIG_FILE);
-        SkinLayers3DConfigData data = JsonConfigIO.load(file, SkinLayers3DConfigData.class);
-        applyFrom(data);
-        WawelAuth.LOG.info("Loaded 3D skin layers config from {}", file.getAbsolutePath());
-    }
-
-    private static void applyFrom(SkinLayers3DConfigData data) {
-        modernSkinSupport = data.modernSkinSupport;
-        hideOverlayArmor = data.hideOverlayArmor;
-        enabled = data.enabled;
-        enableHat = data.enableHat;
-        enableJacket = data.enableJacket;
-        enableLeftSleeve = data.enableLeftSleeve;
-        enableRightSleeve = data.enableRightSleeve;
-        enableLeftPants = data.enableLeftPants;
-        enableRightPants = data.enableRightPants;
-        baseVoxelSize = data.baseVoxelSize;
-        bodyVoxelWidthSize = data.bodyVoxelWidthSize;
-        headVoxelSize = data.headVoxelSize;
-        skullVoxelSize = data.skullVoxelSize;
-        renderDistanceLOD = data.renderDistanceLOD;
-        enableSkulls = data.enableSkulls;
-        fastRender = data.fastRender;
-    }
-
-    /**
-     * GSON-friendly data holder with defaults. Fields are non-static so GSON can
-     * deserialize them. Must have a public no-arg constructor.
-     */
-    public static class SkinLayers3DConfigData {
-
-        public boolean modernSkinSupport = true;
-        public boolean hideOverlayArmor = true;
-        public boolean enabled = true;
-        public boolean enableHat = true;
-        public boolean enableJacket = true;
-        public boolean enableLeftSleeve = true;
-        public boolean enableRightSleeve = true;
-        public boolean enableLeftPants = true;
-        public boolean enableRightPants = true;
-        public float baseVoxelSize = 1.15f;
-        public float bodyVoxelWidthSize = 1.05f;
-        public float headVoxelSize = 1.18f;
-        public float skullVoxelSize = 1.1f;
-        public int renderDistanceLOD = 14;
-        public boolean enableSkulls = true;
-        public boolean fastRender = true;
-    }
 }
