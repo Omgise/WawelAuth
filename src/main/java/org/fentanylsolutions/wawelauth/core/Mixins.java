@@ -135,6 +135,10 @@ public class Mixins extends FentMixins {
             .phase(MixinUtil.Phase.EARLY)
             .side(MiscUtil.Side.CLIENT)
             .build();
+        registry.mixin("MixinRenderingRegistry")
+            .phase(MixinUtil.Phase.EARLY)
+            .side(MiscUtil.Side.CLIENT)
+            .build();
 
         // Client Mixins: 3D skin layers
         registry.mixin("MixinTileEntitySkullRenderer")
@@ -201,6 +205,12 @@ public class Mixins extends FentMixins {
             .extraModid("gtnh-web-map")
             .phase(MixinUtil.Phase.LATE)
             .side(MiscUtil.Side.SERVER)
+            .build();
+
+        registry.mixin("MixinClientProxy")
+            .modid("Botania")
+            .phase(MixinUtil.Phase.LATE)
+            .side(MiscUtil.Side.CLIENT)
             .build();
     }
 

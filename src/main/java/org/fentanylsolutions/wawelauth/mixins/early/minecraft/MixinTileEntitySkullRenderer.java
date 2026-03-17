@@ -1,5 +1,7 @@
 package org.fentanylsolutions.wawelauth.mixins.early.minecraft;
 
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.ModelSkeletonHead;
 import net.minecraft.client.renderer.tileentity.TileEntitySkullRenderer;
@@ -129,7 +131,7 @@ public class MixinTileEntitySkullRenderer {
         if (client == null) return null;
 
         // Skulls can belong to any provider, try all trusted ones
-        java.util.List<ClientProvider> trusted = client.getSessionBridge()
+        List<ClientProvider> trusted = client.getSessionBridge()
             .getTrustedProviders();
         if (!trusted.isEmpty()) {
             return client.getTextureResolver()
