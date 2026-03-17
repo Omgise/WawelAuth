@@ -63,6 +63,7 @@ public class GuiFactory implements IModGuiFactory {
         private static final String KEY_DISABLE_CAPE_UPLOAD = "disableCapeUpload";
         private static final String KEY_DISABLE_TEXTURE_RESET = "disableTextureReset";
         private static final String KEY_MODERN_SKIN_SUPPORT = "modernSkinSupport";
+        private static final String KEY_HIDE_OVERLAY_ARMOR = "hideOverlayArmor";
         private static final String KEY_3D_ENABLED = "skin3dEnabled";
         private static final String KEY_3D_ENABLE_HAT = "skin3dEnableHat";
         private static final String KEY_3D_ENABLE_JACKET = "skin3dEnableJacket";
@@ -148,6 +149,7 @@ public class GuiFactory implements IModGuiFactory {
         private void saveSkinLayers3dConfig(File configDir) {
             SkinLayers3DConfig.SkinLayers3DConfigData data = new SkinLayers3DConfig.SkinLayers3DConfigData();
             data.modernSkinSupport = bool(CAT_SKINS, KEY_MODERN_SKIN_SUPPORT, data.modernSkinSupport);
+            data.hideOverlayArmor = bool(CAT_SKINS, KEY_HIDE_OVERLAY_ARMOR, data.hideOverlayArmor);
             data.enabled = bool(CAT_SKINS, KEY_3D_ENABLED, data.enabled);
             data.enableHat = bool(CAT_SKINS, KEY_3D_ENABLE_HAT, data.enableHat);
             data.enableJacket = bool(CAT_SKINS, KEY_3D_ENABLE_JACKET, data.enableJacket);
@@ -288,6 +290,13 @@ public class GuiFactory implements IModGuiFactory {
                 "Enable modern client skin support (64x64, slim arms, HD pass-through). Disable for legacy-only behavior. Restart recommended.");
             modernSkinSupport.set(current3d.modernSkinSupport);
             modernSkinSupport.setRequiresMcRestart(true);
+
+            Property hideOverlayArmor = uiConfig.get(
+                CAT_SKINS,
+                KEY_HIDE_OVERLAY_ARMOR,
+                defaults3d.hideOverlayArmor,
+                "Disables skin overlay rendering when armor is equipped.");
+            hideOverlayArmor.set(current3d.hideOverlayArmor);
 
             Property enableHat = uiConfig
                 .get(CAT_SKINS, KEY_3D_ENABLE_HAT, defaults3d.enableHat, "3D overlays: render hat layer as voxels.");

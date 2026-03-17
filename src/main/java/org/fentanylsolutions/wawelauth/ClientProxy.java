@@ -4,11 +4,11 @@ import java.io.File;
 
 import net.minecraftforge.common.MinecraftForge;
 
+import org.fentanylsolutions.wawelauth.client.WindowDropHandler;
 import org.fentanylsolutions.wawelauth.client.gui.GuiTransitionScheduler;
 import org.fentanylsolutions.wawelauth.client.gui.WawelAuthKeybind;
 import org.fentanylsolutions.wawelauth.client.render.SkinResolverClientHandler;
 import org.fentanylsolutions.wawelauth.client.render.animatedcape.AnimatedCapeClientHandler;
-import org.fentanylsolutions.wawelauth.client.render.compat.NTMArmorCompat;
 import org.fentanylsolutions.wawelauth.client.render.skinlayers.SkinLayers3DConfig;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelClient;
 import org.fentanylsolutions.wawelauth.wawelclient.WawelPingClientHooks;
@@ -53,11 +53,8 @@ public class ClientProxy extends CommonProxy {
 
         // Window drag-and-drop detection — requires lwjgl3ify (SDL3)
         if (Loader.isModLoaded("lwjgl3ify")) {
-            org.fentanylsolutions.wawelauth.client.WindowDropHandler.register();
+            WindowDropHandler.register();
         }
-
-        // Compat
-        NTMArmorCompat.register();
 
         // Register keybind for account manager
         WawelAuthKeybind keybind = new WawelAuthKeybind();

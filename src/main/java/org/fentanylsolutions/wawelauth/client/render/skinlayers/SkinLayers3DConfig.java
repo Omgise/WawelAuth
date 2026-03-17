@@ -19,6 +19,8 @@ public class SkinLayers3DConfig {
     // Master toggle for all modern skin support: 64x64, slim arms, and HD pass-through.
     public static boolean modernSkinSupport = true;
 
+    public static boolean hideOverlayArmor = true;
+
     // Master toggle for all 3D skin rendering (players + skulls).
     public static boolean enabled = true;
 
@@ -59,6 +61,7 @@ public class SkinLayers3DConfig {
 
     private static void applyFrom(SkinLayers3DConfigData data) {
         modernSkinSupport = data.modernSkinSupport;
+        hideOverlayArmor = data.hideOverlayArmor;
         enabled = data.enabled;
         enableHat = data.enableHat;
         enableJacket = data.enableJacket;
@@ -82,6 +85,7 @@ public class SkinLayers3DConfig {
     public static class SkinLayers3DConfigData {
 
         public boolean modernSkinSupport = true;
+        public boolean hideOverlayArmor = true;
         public boolean enabled = true;
         public boolean enableHat = true;
         public boolean enableJacket = true;
