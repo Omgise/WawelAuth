@@ -578,8 +578,10 @@ public class SessionBridge {
     private void buildTrustedProviders(ClientProvider activeProvider) {
         List<ClientProvider> providers = new ArrayList<>();
 
-        // Pre-capability: keep vanilla trust so main menu and normal servers work
-        if (!isMojangProvider(activeProvider) && !isOfflineProvider(activeProvider)) {
+        // Provisional trust until server sends WAUTH|CAPS. Always include Mojang
+        // for singleplayer, vanilla servers, and the pre-CAPS window. WA servers
+        // replace this entirely via applyServerCapabilities.
+        if (!isMojangProvider(activeProvider)) {
             ClientProvider mojang = providerDAO.findByName(MOJANG_PROVIDER_NAME);
             if (mojang != null) {
                 providers.add(mojang);
